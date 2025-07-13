@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+
+@layer base {
+  :root {
+    --background: 220 20% 10%;
+    --foreground: 220 10% 98%;
+
+    --card: 220 20% 13%;
+    --card-foreground: 220 10% 98%;
+
+    --popover: 220 20% 13%;
+    --popover-foreground: 220 10% 98%;
+
+    --primary: 220 70% 50%;
+    --primary-foreground: 220 10% 98%;
+
+    --secondary: 220 20% 20%;
+    --secondary-foreground: 220 10% 98%;
+
+    --muted: 220 20% 20%;
+    --muted-foreground: 220 10% 60%;
+
+    --accent: 220 70% 50%;
+    --accent-foreground: 220 10% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 220 10% 98%;
+
+    --border: 220 20% 20%;
+    --input: 220 20% 20%;
+    --ring: 220 70% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    font-family: "Poppins", sans-serif;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+.font-display {
+  font-family: var(--font-display), system-ui, sans-serif;
+}
+
