@@ -2,10 +2,10 @@ import { Marquee } from "@/components/eldoraui/marquee"
 import Image from "next/image"
 
 const companies = [
-  {
-    name: "Aptos",
-    url: "/images/Aptos_Primary_WHT.png",
-  },
+  // {
+  //   name: "Bnb Chain",
+  //   url: "/images/bnb.png",
+  // },
   {
     name: "RiseIn",
     url: "/images/Pi7_risein-logo3.png",
@@ -13,7 +13,8 @@ const companies = [
   {
     name: "HackQuest",
     url: "/images/White_on_Transparent.png",
-  }
+  },
+
 ]
 
 export function Logos() {

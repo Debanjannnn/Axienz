@@ -106,7 +106,7 @@ const steps = [
 
 export default function WillInfo() {
   return (
-    <section className="py-20 relative">
+    <section className="py-20 relative bg-[#0d0f12]">
       <div className="container mx-auto px-3">
         <div className="grid md:grid-cols-2 gap-72 ">
           {/* Left Column */}

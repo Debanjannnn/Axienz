@@ -1,4 +1,5 @@
 "use client"
+
 import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion"
 import { cn } from "@/lib/utils"
@@ -68,7 +69,7 @@ export const FloatingNav = ({
           damping: 15,
         }}
         className={cn(
-          "flex max-w-4xl mx-auto border border-white/20 dark:border-gray-300/20 rounded-3xl bg-white/10 backdrop-blur-md shadow-[0px_2px_3px_-1px_rgba(0,0,0,0.1),0px_1px_0px_0px_rgba(255,255,255,0.1),0px_0px_0px_1px_rgba(255,255,255,0.05)] z-[5000] px-4 py-2 items-center justify-between space-x-2 relative fixed top-6 inset-x-0",
+          "flex max-w-7xl w-full mx-auto border border-white/20 dark:border-gray-300/20 rounded-3xl bg-white/10 backdrop-blur-md shadow-[0px_2px_3px_-1px_rgba(0,0,0,0.1),0px_1px_0px_0px_rgba(255,255,255,0.1),0px_0px_0px_1px_rgba(255,255,255,0.05)] z-[5000] px-8 py-4 items-center justify-between space-x-4 relative fixed top-6 inset-x-6",
           className,
         )}
       >
@@ -90,30 +91,24 @@ export const FloatingNav = ({
         />
 
         {/* Logo Section */}
-        <div className="flex items-center space-x-2">
-          <img
-            src="https://i.pinimg.com/736x/49/b3/4c/49b34c656d327c34137701edfc7bc6ae.jpg"
-            alt="Qubik"
-            width={32}
-            height={32}
-            className="rounded-full"
-          />
-          <span className={cn("text-xl font-semibold text-black dark:text-white", poppins.className)}>Qubik</span>
+        <div className="flex items-center space-x-3">
+          <img src="/icons/legacyonchainfav.png" alt="Qubik" width={36} height={36} className="rounded-full" />
+          <span className={cn("text-xl font-semibold text-black dark:text-white", poppins.className)}>Axienz</span>
         </div>
 
         {/* Navigation Items */}
-        <div className="flex items-center space-x-6">
+        <div className="flex items-center space-x-8">
           {navItems.map((navItem: any, idx: number) => (
             <Link
               key={`link-${idx}`}
               href={navItem.link}
               className={cn(
-                "relative text-black dark:text-black items-center flex space-x-1 hover:text-gray-600 transition-colors",
+                "relative text-black dark:text-black items-center flex space-x-1 hover:text-gray-600 transition-colors py-2",
                 poppins.className,
               )}
             >
               <span className="block sm:hidden">{navItem.icon}</span>
-              <span className="hidden sm:block text-sm">{navItem.name}</span>
+              <span className="hidden sm:block text-sm font-medium">{navItem.name}</span>
             </Link>
           ))}
         </div>
@@ -123,7 +118,7 @@ export const FloatingNav = ({
           <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
             className={cn(
-              "border text-sm font-medium relative border-white/20 text-black dark:text-black px-6 py-2 rounded-2xl hover:bg-white/20 transition-colors bg-white/10",
+              "border text-sm font-medium relative border-white/20 text-black dark:text-black px-8 py-3 rounded-2xl hover:bg-white/20 transition-colors bg-white/10",
               poppins.className,
             )}
             aria-haspopup="true"
@@ -132,6 +127,7 @@ export const FloatingNav = ({
             Create Will
             <span className="absolute inset-x-0 w-1/2 mx-auto -bottom-px bg-gradient-to-r from-transparent via-blue-500 to-transparent h-px" />
           </button>
+
           <AnimatePresence>
             {dropdownOpen && (
               <motion.div

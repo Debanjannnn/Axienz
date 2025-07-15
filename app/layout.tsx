@@ -5,8 +5,8 @@ import { SmartWillProvider } from "@/context/SmartWillContext";
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'EDU LEGACY',
-  description: 'Secure Your LegacyOn EDU Chain',
+  title: 'Axienz',
+  description: 'Secure Your Legacy on BNB Chain',
 }
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",

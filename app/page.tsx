@@ -7,6 +7,7 @@ import Footer from "../components/Footer";
 import { FloatingNav } from "@/components/ui/floating-navbar";
 import HeroSection from "../components/Hero";
 import { Features } from "@/components/Features";
+import FooterGlow from "@/components/mvpblocks/footer-glow";
 
 export default function Home() {
 
@@ -52,17 +53,22 @@ export default function Home() {
         <FloatingNav navItems={navItems} />
       </div>
       
-      <div className="mt-20">
+      <div className="pt-24">
         <HeroSection />
       </div>
 
        {/* <Features /> */}
         <WillInfo />
 
-        <FAQ />
-     
-      
-      <Footer />
+        {/* FAQ section: no special background, make FAQ extra wide and centered */}
+        <div className="flex justify-center w-full px-2 bg-[#0d0f12]">
+         
+            <FAQ />
+  
+        </div>
+
+        <Footer />
+      {/* <FooterGlow/> */}
       {/* </DotBackground> */}
       </div >
     </div>
