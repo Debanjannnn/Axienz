@@ -34,7 +34,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { isAddress, ethers } from "ethers";
+import { isAddress } from "ethers";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { motion } from "framer-motion";
 
@@ -48,6 +48,7 @@ interface Claimable {
   amountUSD: number;
   creationTime?: number;
   isClaimed?: boolean;
+  isClaimable?: boolean;
 }
 
 export default function Claimables() {
@@ -65,7 +66,7 @@ export default function Claimables() {
 
   const [claimables, setClaimables] = useState<Claimable[]>([]);
   const [loading, setLoading] = useState(true);
-  const [claiming, setClaiming] = useState(false);
+  const [claiming, setClaiming] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [bnbPrice, setBnbPrice] = useState<number | null>(null);
   const [loadingPrice, setLoadingPrice] = useState(false);
@@ -84,6 +85,13 @@ export default function Claimables() {
     }
   }, []);
 
+  // Check if a will is claimable based on time
+  const checkIfClaimable = (lastPingTime: number, claimWaitTime: number) => {
+    const now = Math.floor(Date.now() / 1000);
+    const claimableTime = lastPingTime + claimWaitTime;
+    return now >= claimableTime;
+  };
+
   // Load claimables with USD conversion
   const loadClaimables = useCallback(async () => {
     if (!account) return;
@@ -91,7 +99,7 @@ export default function Claimables() {
     setLoading(true);
     setError(null);
     try {
-      const wills = await getNormalWillsAsBeneficiary();
+      const wills = await getNormalWillsAsBeneficiary(account);
       console.log("Fetched wills:", wills);
 
       if (!wills || wills.length === 0) {
@@ -108,25 +116,21 @@ export default function Claimables() {
             const bnbAmount = parseFloat(will.amount);
             const usdAmount = bnbPrice ? await convertBNBToUSD(bnbAmount) : 0;
 
+            const lastPingTime = Number(willDetails.lastPingTime);
+            const claimWaitTime = Number(willDetails.claimWaitTime);
+            const isClaimable = checkIfClaimable(lastPingTime, claimWaitTime);
+
             return {
-              ...will,
-              description: willDetails
-                ? willDetails.description
-                : "No description available",
-              lastActiveTime: willDetails
-                ? Number(willDetails.lastPingTime) * 1000
-                : Date.now(),
-              claimWaitTime: willDetails
-                ? Number(willDetails.claimWaitTime)
-                : 31536000, // 1 year default
-              beneficiary: willDetails
-                ? willDetails.beneficiary
-                : will.beneficiary || account,
+              owner: will.owner,
+              amount: will.amount,
+              description: willDetails.description || "Digital Inheritance",
+              lastActiveTime: lastPingTime * 1000,
+              claimWaitTime: claimWaitTime,
+              beneficiary: willDetails.beneficiary,
               amountUSD: usdAmount,
-              creationTime: willDetails
-                ? Number(willDetails.creationTime) * 1000
-                : undefined,
-              isClaimed: willDetails ? willDetails.isClaimed : false,
+              creationTime: Number(willDetails.creationTime) * 1000,
+              isClaimed: willDetails.isClaimed,
+              isClaimable: isClaimable && !willDetails.isClaimed,
             };
           } catch (err) {
             console.error(
@@ -139,13 +143,15 @@ export default function Claimables() {
             const usdAmount = bnbPrice ? await convertBNBToUSD(bnbAmount) : 0;
 
             return {
-              ...will,
-              description: "Error loading description",
+              owner: will.owner,
+              amount: will.amount,
+              description: "Error loading details",
               lastActiveTime: Date.now(),
-              claimWaitTime: 31536000,
+              claimWaitTime: 31536000, // 1 year default
               beneficiary: account,
               amountUSD: usdAmount,
               isClaimed: false,
+              isClaimable: false,
             };
           }
         }),
@@ -184,7 +190,7 @@ export default function Claimables() {
     }
 
     try {
-      setClaiming(true);
+      setClaiming(owner);
       setError(null);
 
       const success = await claimNormalWill(owner);
@@ -199,20 +205,12 @@ export default function Claimables() {
       console.error("Error during claim:", err);
       setError(err.message || "Failed to claim.");
     } finally {
-      setClaiming(false);
+      setClaiming(null);
     }
-  };
-
-  const isClaimable = (lastActiveTime: number, claimWaitTime: number) => {
-    const waitTimeMs = claimWaitTime * 1000;
-    return Date.now() >= lastActiveTime + waitTimeMs;
   };
 
   const getTimeRemaining = (lastActiveTime: number, claimWaitTime: number) => {
     const endTime = lastActiveTime + claimWaitTime * 1000;
-    if (isNaN(endTime)) {
-      return "Invalid Date";
-    }
 
     if (Date.now() >= endTime) {
       return "Available now";
@@ -230,11 +228,7 @@ export default function Claimables() {
       };
     }
 
-    const canClaim = isClaimable(
-      claimable.lastActiveTime,
-      claimable.claimWaitTime,
-    );
-    if (canClaim) {
+    if (claimable.isClaimable) {
       return {
         status: "Claimable",
         color: "bg-green-500/20 text-green-400 border-green-500/30",
@@ -398,7 +392,7 @@ export default function Claimables() {
                         <div className="flex items-center justify-between">
                           <div>
                             <CardTitle className="text-xl font-semibold text-white">
-                              {claimable.description || "Digital Legacy"}
+                              {claimable.description}
                             </CardTitle>
                             <CardDescription className="text-gray-400 flex items-center gap-2 mt-1">
                               <FileText className="h-4 w-4 text-amber-400" />
@@ -496,13 +490,13 @@ export default function Claimables() {
                         <Button
                           onClick={() => handleClaim(claimable.owner)}
                           disabled={
-                            claiming ||
+                            claiming === claimable.owner ||
                             !statusInfo.canClaim ||
                             claimable.isClaimed
                           }
                           className="w-full bg-amber-500 hover:bg-amber-600 text-black font-bold py-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {claiming ? (
+                          {claiming === claimable.owner ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                               Claiming...
