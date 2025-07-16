@@ -18,7 +18,7 @@ export function AnimatedListItem({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    //@ts-ignore
+    // @ts-expect-error - motion.div layout prop typing issue
     <motion.div {...animations} layout className="mx-auto w-full">
       {children}
     </motion.div>
