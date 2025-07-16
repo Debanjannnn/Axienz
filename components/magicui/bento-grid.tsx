@@ -111,7 +111,6 @@ export default function BentoGrid() {
           initial="initial"
           animate="animate"
           whileHover="hover"
-          //@ts-ignore
           variants={cardVariants}
           custom={0}
         >

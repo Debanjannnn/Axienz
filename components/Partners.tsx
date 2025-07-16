@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import Image from 'next/image';
 
 const partners = [
   { name: "Telos", logo: "/telos-logo.svg" },
@@ -26,7 +27,7 @@ export default function Partners() {
               transition={{ duration: 0.5, delay: index * 0.1 }}
               className="grayscale hover:grayscale-0 transition-all duration-300"
             >
-              <img src={partner.logo || "/placeholder.svg"} alt={partner.name} className="h-8 w-auto" />
+              <Image src={partner.logo || "/placeholder.svg"} alt={partner.name} width={32} height={32} className="h-8 w-auto" />
             </motion.div>
           ))}
         </div>

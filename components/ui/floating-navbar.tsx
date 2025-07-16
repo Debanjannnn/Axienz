@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { Poppins } from "next/font/google"
 import Link from "next/link"
 import type { JSX } from "react/jsx-runtime"
+import Image from 'next/image';
 
 const poppins = Poppins({
   weight: ["400", "500", "600", "700"],
@@ -92,7 +93,7 @@ export const FloatingNav = ({
 
         {/* Logo Section */}
         <div className="flex items-center space-x-3">
-          <img src="/icons/legacyonchainfav.png" alt="Qubik" width={36} height={36} className="rounded-full" />
+          <Image src="/icons/legacyonchainfav.png" alt="Qubik" width={36} height={36} className="rounded-full" />
           <span className={cn("text-xl font-semibold text-black dark:text-white", poppins.className)}>Axienz</span>
         </div>
 

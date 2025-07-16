@@ -794,7 +794,7 @@ export default function CreateSimpleWill() {
                 <div className="flex items-start gap-3">
                   <div className="w-4 h-4 mt-1 bg-amber-400 rounded-full flex-shrink-0" />
                   <p>
-                    <span className="font-bold text-white">Fill in the details:</span> Provide the beneficiary's address, asset description, and the amount of BNB to lock.
+                    <span className="font-bold text-white">Fill in the details:</span> Provide the beneficiary&apos;s address, asset description, and the amount of BNB to lock.
                   </p>
                 </div>
                 <div className="flex items-start gap-3">
@@ -828,7 +828,7 @@ export default function CreateSimpleWill() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <p className="text-sm text-gray-300">
-                  Your "last activity" is defined by the timestamp of the last outgoing transaction from your wallet.
+                  Your &quot;last activity&quot; is defined by the timestamp of the last outgoing transaction from your wallet.
                 </p>
                 <Alert className="bg-blue-900/20 border-blue-500/50 mt-2">
                   <Info className="h-4 w-4" />

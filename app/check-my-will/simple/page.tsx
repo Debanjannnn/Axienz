@@ -215,7 +215,7 @@ const CheckMyWill = () => {
     updateCounter();
     const interval = setInterval(updateCounter, 1000);
     return () => clearInterval(interval);
-  }, [willDetails?.lastPingTime, willDetails?.claimWaitTime]);
+  }, [willDetails]);
 
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault();

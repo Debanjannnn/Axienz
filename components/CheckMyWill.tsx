@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { useSmartWill } from "../context/SmartWillContext"
@@ -34,15 +34,7 @@ const CheckMyWill = () => {
   const { account, connectWallet, getNormalWill, ping, depositNormalWill } = useSmartWill()
   const router = useRouter()
 
-  useEffect(() => {
-    if (!account) {
-      connectWallet()
-    } else {
-      fetchWillDetails()
-    }
-  }, [account, connectWallet])
-
-  const fetchWillDetails = async () => {
+  const fetchWillDetails = useCallback(async () => {
     setLoading(true)
     try {
       const details = await getNormalWill(account)
@@ -53,7 +45,15 @@ const CheckMyWill = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [account, getNormalWill])
+
+  useEffect(() => {
+    if (!account) {
+      connectWallet()
+    } else {
+      fetchWillDetails()
+    }
+  }, [account, connectWallet, fetchWillDetails])
 
   const updateTimeRemaining = (lastPingTimestamp: bigint) => {
     const updateCounter = () => {

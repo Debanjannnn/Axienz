@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useSmartWill } from "@/context/SmartWillContext";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
@@ -51,15 +51,7 @@ export default function WillDetails() {
   const [claiming, setClaiming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isConnected) {
-      connectWallet();
-    } else {
-      fetchWillDetails();
-    }
-  }, [isConnected, id, connectWallet]); // Added connectWallet to dependencies
-
-  const fetchWillDetails = async () => {
+  const fetchWillDetails = useCallback(async () => {
     try {
       setLoading(true);
       // This would be replaced with actual contract call
@@ -80,7 +72,15 @@ export default function WillDetails() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    if (!isConnected) {
+      connectWallet();
+    } else {
+      fetchWillDetails();
+    }
+  }, [isConnected, id, connectWallet, fetchWillDetails]);
 
   const handleClaim = async () => {
     try {
