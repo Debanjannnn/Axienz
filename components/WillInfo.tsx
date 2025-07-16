@@ -67,14 +67,14 @@ export default function HowItWorks() {
       step: "Step 1",
       title: "Set Up & Fund Your Will",
       description:
-        "Initialize your will by specifying a recipient and the amount to be inherited. Funds are securely locked in the contract on the Aptos blockchain.",
+        "Initialize your will by specifying a recipient and the amount to be inherited. Funds are securely locked in the contract on the BNB Cain.",
       features: [
         "Specify recipient address",
         "Choose inheritance amount",
         "Funds locked in contract",
         "Immutable blockchain record",
         "Global registry for recipients",
-        "Aptos network security",
+        "BNB's network security",
       ],
     },
     {
