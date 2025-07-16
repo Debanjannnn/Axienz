@@ -545,7 +545,7 @@ export default function Claimables() {
                 <div className="w-2 h-2 bg-amber-400 rounded-full mt-2"></div>
                 <p>
                   You can only claim inheritances after the specified waiting
-                  period following the testator's last activity.
+                  period following the testator&apos;s last activity.
                 </p>
               </div>
               <div className="flex items-start gap-3">
