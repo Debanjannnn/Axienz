@@ -6,6 +6,14 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
+import { useSmartWill } from "@/context/SmartWillContext";
+import {
+  getBNBPrice,
+  convertBNBToUSD,
+  formatUSD,
+  formatBNB,
+  getDualDisplay,
+} from "@/utils/usdConversion";
 import {
   Wallet,
   Activity,
@@ -15,6 +23,9 @@ import {
   FileText,
   Users,
   Settings,
+  DollarSign,
+  Clock,
+  AlertCircle,
 } from "lucide-react";
 
 interface BNBPrice {
@@ -24,38 +35,53 @@ interface BNBPrice {
   error?: string;
 }
 
-interface ActivityItem {
+interface ActivityDisplay {
   id: string;
-  type: string;
+  title: string;
   description: string;
+  timestamp: number;
+  activityType: string;
   amount: string;
-  hash: string;
-  timestamp: number;
+  amountUSD: string;
   status: string;
-}
-
-interface DashboardActivity {
-  address: string;
-  activities: ActivityItem[];
-  total: number;
-  timestamp: number;
+  icon: any;
 }
 
 export default function DashboardPage() {
-  const [account, setAccount] = useState<string>("0xdc5...c52e");
-  const [balance, setBalance] = useState<string>("0.0000");
-  const [isConnected, setIsConnected] = useState(true);
+  const {
+    account,
+    balance,
+    isConnected,
+    connectWallet,
+    loading: walletLoading,
+    error: walletError,
+    getUserActivity,
+    getUserActivitySummary,
+    getContractBalance,
+    getNormalWill,
+    hasCreatedWill,
+  } = useSmartWill();
+
   const [bnbPrice, setBnbPrice] = useState<BNBPrice | null>(null);
-  const [activity, setActivity] = useState<DashboardActivity | null>(null);
+  const [activities, setActivities] = useState<ActivityDisplay[]>([]);
+  const [activitySummary, setActivitySummary] = useState<any>(null);
+  const [contractBalance, setContractBalance] = useState("0");
+  const [userWillData, setUserWillData] = useState<any>(null);
   const [loadingPrice, setLoadingPrice] = useState(false);
   const [loadingActivity, setLoadingActivity] = useState(false);
+  const [loadingWillData, setLoadingWillData] = useState(false);
+  const [balanceUSD, setBalanceUSD] = useState(0);
+  const [contractBalanceUSD, setContractBalanceUSD] = useState(0);
 
   const fetchBNBPrice = async () => {
     setLoadingPrice(true);
     try {
-      const response = await fetch("/api/bnb-price");
-      const data = await response.json();
-      setBnbPrice(data);
+      const price = await getBNBPrice();
+      setBnbPrice({
+        price,
+        cached: false,
+        timestamp: Date.now(),
+      });
     } catch (error) {
       console.error("Error fetching BNB price:", error);
     } finally {
@@ -63,29 +89,139 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchActivity = useCallback(async () => {
+  const fetchUserActivity = useCallback(async () => {
     if (!account) return;
 
     setLoadingActivity(true);
     try {
-      const response = await fetch(
-        `/api/dashboard/activity?address=${account}`,
+      const [activityData, summary] = await Promise.all([
+        getUserActivity(account, 0, 10),
+        getUserActivitySummary(account),
+      ]);
+
+      // Convert activities to display format
+      const formattedActivities = await Promise.all(
+        activityData.activities.map(async (activity: any, index: number) => {
+          const amountBNB = parseFloat(activity.amount) / 1e18;
+          const amountUSD = await convertBNBToUSD(amountBNB);
+
+          let icon = Activity;
+          let status = "Completed";
+          let title = activity.activityType;
+
+          switch (activity.activityType) {
+            case "WILL_CREATED":
+              icon = FileText;
+              title = "Will Created";
+              status = "Completed";
+              break;
+            case "DEPOSIT":
+              icon = TrendingUp;
+              title = "Deposit Made";
+              status = "Completed";
+              break;
+            case "PING":
+              icon = Activity;
+              title = "Activity Confirmed";
+              status = "Completed";
+              break;
+            case "CLAIM":
+              icon = Users;
+              title = "Will Claimed";
+              status = "Executed";
+              break;
+            case "WITHDRAWAL":
+              icon = Wallet;
+              title = "Withdrawal";
+              status = "Completed";
+              break;
+            default:
+              icon = Activity;
+              title = activity.activityType.replace("_", " ");
+          }
+
+          return {
+            id: `${activity.timestamp}-${index}`,
+            title,
+            description: activity.description || `${title} transaction`,
+            timestamp: activity.timestamp * 1000,
+            activityType: activity.activityType,
+            amount: formatBNB(amountBNB),
+            amountUSD: formatUSD(amountUSD),
+            status,
+            icon,
+          };
+        }),
       );
-      const data = await response.json();
-      setActivity(data);
+
+      setActivities(formattedActivities);
+      setActivitySummary(summary);
     } catch (error) {
-      console.error("Error fetching activity:", error);
+      console.error("Error fetching user activity:", error);
     } finally {
       setLoadingActivity(false);
     }
-  }, [account]);
+  }, [account, getUserActivity, getUserActivitySummary]);
+
+  const fetchWillData = useCallback(async () => {
+    if (!account) return;
+
+    setLoadingWillData(true);
+    try {
+      const [hasWill, willData, contractBal] = await Promise.all([
+        hasCreatedWill(),
+        hasCreatedWill().then(async (has) => {
+          if (has) {
+            return await getNormalWill(account);
+          }
+          return null;
+        }),
+        getContractBalance(),
+      ]);
+
+      setUserWillData(hasWill ? willData : null);
+      setContractBalance(contractBal);
+
+      // Convert contract balance to USD
+      const contractUSD = await convertBNBToUSD(contractBal);
+      setContractBalanceUSD(contractUSD);
+    } catch (error) {
+      console.error("Error fetching will data:", error);
+    } finally {
+      setLoadingWillData(false);
+    }
+  }, [account, hasCreatedWill, getNormalWill, getContractBalance]);
+
+  const updateBalanceUSD = useCallback(async () => {
+    if (balance && bnbPrice) {
+      const usd = await convertBNBToUSD(balance);
+      setBalanceUSD(usd);
+    }
+  }, [balance, bnbPrice]);
 
   useEffect(() => {
-    fetchBNBPrice();
-    fetchActivity();
-    const priceInterval = setInterval(fetchBNBPrice, 60000);
-    return () => clearInterval(priceInterval);
-  }, [fetchActivity]);
+    if (isConnected && account) {
+      fetchBNBPrice();
+      fetchUserActivity();
+      fetchWillData();
+    }
+  }, [isConnected, account, fetchUserActivity, fetchWillData]);
+
+  useEffect(() => {
+    updateBalanceUSD();
+  }, [updateBalanceUSD]);
+
+  useEffect(() => {
+    // Auto refresh data every 30 seconds
+    const interval = setInterval(() => {
+      if (isConnected && account) {
+        fetchBNBPrice();
+        fetchUserActivity();
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [isConnected, account, fetchUserActivity]);
 
   const formatAddress = (address: string) => {
     if (!address) return "";
@@ -97,21 +233,46 @@ export default function DashboardPage() {
     const diff = now - timestamp;
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor(diff / (1000 * 60));
 
     if (days > 0) return `${days}d ago`;
     if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
     return "Just now";
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-  };
+  if (!isConnected) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center text-white">
+          <Card className="w-full max-w-md bg-black/40 backdrop-blur-md border-white/20 shadow-xl rounded-2xl">
+            <CardHeader className="text-center">
+              <h3 className="text-lg font-semibold">Connect Wallet</h3>
+              <p className="text-gray-400">
+                Please connect your wallet to view dashboard
+              </p>
+            </CardHeader>
+            <CardContent className="p-4 flex justify-center">
+              <Button
+                onClick={connectWallet}
+                disabled={walletLoading}
+                className="bg-amber-500 hover:bg-amber-600 text-black font-bold py-2 px-4 rounded transition-colors"
+              >
+                {walletLoading ? "Connecting..." : "Connect Wallet"}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
       <div className="min-h-screen text-white p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-          {/* BNB Wallet Card */}
+        {/* Header Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+          {/* Wallet Balance */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -127,35 +288,27 @@ export default function DashboardPage() {
                 <div className="flex items-center space-x-2">
                   <Wallet className="w-5 h-5" />
                   <span className="text-sm font-medium opacity-90">
-                    BNB WALLET
+                    WALLET BALANCE
                   </span>
                 </div>
                 <div className="text-xs opacity-70">BNB NETWORK</div>
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="space-y-2">
-                  <div className="text-2xl font-bold">{balance} BNB</div>
-                  <div className="text-sm opacity-80">0</div>
-                  <div className="text-xs opacity-70">CARDHOLDER</div>
+                  <div className="text-2xl font-bold">{formatBNB(balance)}</div>
+                  <div className="text-sm opacity-80">
+                    {formatUSD(balanceUSD)}
+                  </div>
+                  <div className="text-xs opacity-70">ACCOUNT</div>
                   <div className="text-xs font-mono opacity-80">
                     {formatAddress(account)}
-                  </div>
-                  <div className="text-xs opacity-60">@binance</div>
-                  <div className="flex justify-between items-center mt-4">
-                    <div className="text-xs opacity-70">
-                      {formatAddress("0xdce5...e52e")}
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs opacity-70">9/8</div>
-                      <div className="text-xs opacity-70">CVC</div>
-                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </motion.div>
 
-          {/* Asset Distribution */}
+          {/* Contract Balance */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -163,68 +316,34 @@ export default function DashboardPage() {
           >
             <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
               <CardHeader className="pb-4">
-                <h3 className="text-white font-semibold">Asset Distribution</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-amber-400" />
+                    Contract TVL
+                  </h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={fetchWillData}
+                    disabled={loadingWillData}
+                    className="text-gray-400 hover:text-amber-400 p-1"
+                  >
+                    <RefreshCw
+                      className={`w-4 h-4 ${loadingWillData ? "animate-spin" : ""}`}
+                    />
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-center mb-6">
-                  <div className="relative w-32 h-32">
-                    <svg
-                      className="w-32 h-32 transform -rotate-90"
-                      viewBox="0 0 100 100"
-                    >
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="35"
-                        stroke="currentColor"
-                        strokeWidth="8"
-                        fill="transparent"
-                        className="text-gray-700"
-                      />
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="35"
-                        stroke="currentColor"
-                        strokeWidth="8"
-                        fill="transparent"
-                        strokeDasharray={`${73 * 2.2} ${100 * 2.2}`}
-                        className="text-amber-400"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-2xl font-bold text-white">73%</span>
-                      <span className="text-xs text-gray-400">Allocated</span>
-                    </div>
+                <div className="space-y-2">
+                  <div className="text-2xl font-bold text-amber-400">
+                    {formatBNB(contractBalance)}
                   </div>
-                </div>
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-amber-400 rounded-full"></div>
-                      <span className="text-gray-300">Digital Assets</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-white">45% • $3,780</div>
-                    </div>
+                  <div className="text-sm text-gray-300">
+                    {formatUSD(contractBalanceUSD)}
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
-                      <span className="text-gray-300">Smart Contracts</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-white">28% • $2,350</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
-                      <span className="text-gray-300">Reserved</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-white">27% • $2,270</div>
-                    </div>
+                  <div className="text-xs text-gray-400">
+                    Total Value Locked
                   </div>
                 </div>
               </CardContent>
@@ -240,7 +359,10 @@ export default function DashboardPage() {
             <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-white font-semibold">BNB Price</h3>
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    <DollarSign className="w-5 h-5 text-amber-400" />
+                    BNB Price
+                  </h3>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -253,59 +375,27 @@ export default function DashboardPage() {
                     />
                   </Button>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
-                    7d: +15.85%
-                  </Badge>
-                </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <div className="text-3xl font-bold text-white mb-1">
-                      ${bnbPrice?.price.toFixed(2) || "5.15"}
-                    </div>
-                    <div className="flex justify-between text-sm text-gray-400">
-                      <span>
-                        24h High: $
-                        {bnbPrice ? (bnbPrice.price * 1.02).toFixed(2) : "5.16"}
-                      </span>
-                      <span>
-                        24h Low: $
-                        {bnbPrice ? (bnbPrice.price * 0.98).toFixed(2) : "4.81"}
-                      </span>
-                    </div>
+                <div className="space-y-2">
+                  <div className="text-2xl font-bold text-white">
+                    ${bnbPrice?.price.toFixed(2) || "---"}
                   </div>
-
-                  <div className="text-right text-sm text-gray-400 space-y-1">
-                    <div>Market Cap: $3.39B</div>
-                    <div>Volume: $293.0M</div>
-                    <div>Last updated: 10:37:44</div>
+                  <div className="flex items-center space-x-2">
+                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                      Live
+                    </Badge>
                   </div>
-
-                  {/* Simple Chart Representation */}
-                  <div className="h-16 bg-white/5 backdrop-blur rounded flex items-end justify-center p-2">
-                    <div className="flex items-end space-x-1 h-full">
-                      {Array.from({ length: 20 }, (_, i) => (
-                        <div
-                          key={i}
-                          className="bg-amber-400/60 w-2 rounded-t"
-                          style={{
-                            height: `${Math.random() * 80 + 20}%`,
-                          }}
-                        />
-                      ))}
-                    </div>
+                  <div className="text-xs text-gray-400">
+                    Updated:{" "}
+                    {bnbPrice ? formatTime(bnbPrice.timestamp) : "Never"}
                   </div>
                 </div>
               </CardContent>
             </Card>
           </motion.div>
-        </div>
 
-        {/* Bottom Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Recent Activity */}
+          {/* Activity Summary */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -313,48 +403,33 @@ export default function DashboardPage() {
           >
             <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
               <CardHeader className="pb-4">
-                <div className="flex items-center space-x-2">
+                <h3 className="text-white font-semibold flex items-center gap-2">
                   <Activity className="w-5 h-5 text-amber-400" />
-                  <h3 className="text-white font-semibold">Recent Activity</h3>
-                </div>
+                  Activity
+                </h3>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <ActivityRow
-                    icon={FileText}
-                    title="Will Creation"
-                    time="Dec 15, 2:30 PM"
-                    amount="-$0.01"
-                    status="Completed"
-                  />
-                  <ActivityRow
-                    icon={TrendingUp}
-                    title="Asset Distribution"
-                    time="Dec 12, 10:15 AM"
-                    amount="+$2,500.00"
-                    status="Executed"
-                    positive
-                  />
-                  <ActivityRow
-                    icon={Settings}
-                    title="Smart Contract Update"
-                    time="Dec 10, 4:45 PM"
-                    amount="-$0.01"
-                    status="Completed"
-                  />
-                  <ActivityRow
-                    icon={Shield}
-                    title="Legacy Verification"
-                    time="Dec 8, 9:20 AM"
-                    amount="-$0.01"
-                    status="Verified"
-                  />
+                <div className="space-y-2">
+                  <div className="text-2xl font-bold text-white">
+                    {activitySummary?.totalActivities || 0}
+                  </div>
+                  <div className="text-sm text-gray-300">
+                    {activitySummary?.hasActivity ? "Active" : "No Activity"}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {activitySummary?.lastActivityTime
+                      ? `Last: ${formatTime(activitySummary.lastActivityTime * 1000)}`
+                      : "No recent activity"}
+                  </div>
                 </div>
               </CardContent>
             </Card>
           </motion.div>
+        </div>
 
-          {/* Quick Actions */}
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Recent Activity */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -362,39 +437,118 @@ export default function DashboardPage() {
           >
             <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
               <CardHeader className="pb-4">
-                <h3 className="text-white font-semibold">Quick Actions</h3>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-amber-400" />
+                    Recent Activity
+                  </h3>
                   <Button
-                    variant="outline"
-                    className="h-20 flex flex-col items-center justify-center space-y-2 bg-white/5 backdrop-blur border-white/20 hover:bg-white/10 hover:border-amber-400/50 transition-all"
+                    variant="ghost"
+                    size="sm"
+                    onClick={fetchUserActivity}
+                    disabled={loadingActivity}
+                    className="text-gray-400 hover:text-amber-400 p-1"
                   >
-                    <FileText className="w-6 h-6 text-amber-400" />
-                    <span className="text-sm">Create Will</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-20 flex flex-col items-center justify-center space-y-2 bg-white/5 backdrop-blur border-white/20 hover:bg-white/10 hover:border-amber-400/50 transition-all"
-                  >
-                    <Users className="w-6 h-6 text-amber-400" />
-                    <span className="text-sm">Claim Will</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-20 flex flex-col items-center justify-center space-y-2 bg-white/5 backdrop-blur border-white/20 hover:bg-white/10 hover:border-amber-400/50 transition-all"
-                  >
-                    <Activity className="w-6 h-6 text-amber-400" />
-                    <span className="text-sm">Ping Will</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-20 flex flex-col items-center justify-center space-y-2 bg-white/5 backdrop-blur border-white/20 hover:bg-white/10 hover:border-amber-400/50 transition-all"
-                  >
-                    <Settings className="w-6 h-6 text-amber-400" />
-                    <span className="text-sm">Settings</span>
+                    <RefreshCw
+                      className={`w-4 h-4 ${loadingActivity ? "animate-spin" : ""}`}
+                    />
                   </Button>
                 </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4 max-h-80 overflow-y-auto">
+                  {activities.length > 0 ? (
+                    activities.map((activity) => (
+                      <ActivityRow
+                        key={activity.id}
+                        icon={activity.icon}
+                        title={activity.title}
+                        description={activity.description}
+                        time={formatTime(activity.timestamp)}
+                        amount={activity.amount}
+                        amountUSD={activity.amountUSD}
+                        status={activity.status}
+                      />
+                    ))
+                  ) : (
+                    <div className="text-center py-8">
+                      <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-gray-400">No recent activity</p>
+                      <p className="text-sm text-gray-500">
+                        Start by creating a will or making transactions
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Will Information */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+          >
+            <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+              <CardHeader className="pb-4">
+                <h3 className="text-white font-semibold flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-amber-400" />
+                  Your Will Status
+                </h3>
+              </CardHeader>
+              <CardContent>
+                {userWillData ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Amount Secured:</span>
+                      <div className="text-right">
+                        <div className="text-white font-semibold">
+                          {formatBNB(
+                            parseFloat(userWillData.amount?.toString() || "0") /
+                              1e18,
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-400">
+                          {/* Will calculate USD value */}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Beneficiary:</span>
+                      <span className="text-white font-mono text-sm">
+                        {formatAddress(userWillData.beneficiary)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Status:</span>
+                      <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                        Active
+                      </Badge>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-white/10">
+                      <Button
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-black font-medium transition-colors"
+                        onClick={() =>
+                          (window.location.href = "/check-my-will")
+                        }
+                      >
+                        Manage Will
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-400 mb-4">No will created yet</p>
+                    <Button
+                      className="bg-amber-500 hover:bg-amber-600 text-black font-medium transition-colors"
+                      onClick={() => (window.location.href = "/create-will")}
+                    >
+                      Create Your Will
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
@@ -407,35 +561,35 @@ export default function DashboardPage() {
 function ActivityRow({
   icon: Icon,
   title,
+  description,
   time,
   amount,
+  amountUSD,
   status,
-  positive = false,
 }: {
   icon: any;
   title: string;
+  description: string;
   time: string;
   amount: string;
+  amountUSD: string;
   status: string;
-  positive?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between py-2">
+    <div className="flex items-center justify-between py-3 border-b border-white/5 last:border-b-0">
       <div className="flex items-center space-x-3">
         <div className="w-8 h-8 bg-white/10 backdrop-blur border border-white/20 rounded-full flex items-center justify-center">
           <Icon className="w-4 h-4 text-amber-400" />
         </div>
         <div>
-          <div className="text-sm text-white">{title}</div>
-          <div className="text-xs text-gray-400">{time}</div>
+          <div className="text-sm text-white font-medium">{title}</div>
+          <div className="text-xs text-gray-400">{description}</div>
+          <div className="text-xs text-gray-500">{time}</div>
         </div>
       </div>
       <div className="text-right">
-        <div
-          className={`text-sm ${positive ? "text-green-500" : "text-white"}`}
-        >
-          {amount}
-        </div>
+        <div className="text-sm text-white font-medium">{amount}</div>
+        <div className="text-xs text-gray-400">{amountUSD}</div>
         <div className="text-xs text-green-500">{status}</div>
       </div>
     </div>
