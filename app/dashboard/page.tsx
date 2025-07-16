@@ -12,7 +12,6 @@ import {
   convertBNBToUSD,
   formatUSD,
   formatBNB,
-  getDualDisplay,
 } from "@/utils/usdConversion";
 import {
   Wallet,
@@ -26,6 +25,7 @@ import {
   DollarSign,
   Clock,
   AlertCircle,
+  Plus,
 } from "lucide-react";
 
 interface BNBPrice {
@@ -33,18 +33,6 @@ interface BNBPrice {
   cached: boolean;
   timestamp: number;
   error?: string;
-}
-
-interface ActivityDisplay {
-  id: string;
-  title: string;
-  description: string;
-  timestamp: number;
-  activityType: string;
-  amount: string;
-  amountUSD: string;
-  status: string;
-  icon: any;
 }
 
 export default function DashboardPage() {
@@ -55,23 +43,22 @@ export default function DashboardPage() {
     connectWallet,
     loading: walletLoading,
     error: walletError,
-    getUserActivity,
-    getUserActivitySummary,
     getContractBalance,
     getNormalWill,
     hasCreatedWill,
+    getNormalWillsAsBeneficiary,
   } = useSmartWill();
 
   const [bnbPrice, setBnbPrice] = useState<BNBPrice | null>(null);
-  const [activities, setActivities] = useState<ActivityDisplay[]>([]);
-  const [activitySummary, setActivitySummary] = useState<any>(null);
   const [contractBalance, setContractBalance] = useState("0");
   const [userWillData, setUserWillData] = useState<any>(null);
+  const [claimableWills, setClaimableWills] = useState<any[]>([]);
   const [loadingPrice, setLoadingPrice] = useState(false);
-  const [loadingActivity, setLoadingActivity] = useState(false);
   const [loadingWillData, setLoadingWillData] = useState(false);
+  const [loadingClaimables, setLoadingClaimables] = useState(false);
   const [balanceUSD, setBalanceUSD] = useState(0);
   const [contractBalanceUSD, setContractBalanceUSD] = useState(0);
+  const [userWillAmountUSD, setUserWillAmountUSD] = useState(0);
 
   const fetchBNBPrice = async () => {
     setLoadingPrice(true);
@@ -89,108 +76,57 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchUserActivity = useCallback(async () => {
-    if (!account) return;
-
-    setLoadingActivity(true);
-    try {
-      const [activityData, summary] = await Promise.all([
-        getUserActivity(account, 0, 10),
-        getUserActivitySummary(account),
-      ]);
-
-      // Convert activities to display format
-      const formattedActivities = await Promise.all(
-        activityData.activities.map(async (activity: any, index: number) => {
-          const amountBNB = parseFloat(activity.amount) / 1e18;
-          const amountUSD = await convertBNBToUSD(amountBNB);
-
-          let icon = Activity;
-          let status = "Completed";
-          let title = activity.activityType;
-
-          switch (activity.activityType) {
-            case "WILL_CREATED":
-              icon = FileText;
-              title = "Will Created";
-              status = "Completed";
-              break;
-            case "DEPOSIT":
-              icon = TrendingUp;
-              title = "Deposit Made";
-              status = "Completed";
-              break;
-            case "PING":
-              icon = Activity;
-              title = "Activity Confirmed";
-              status = "Completed";
-              break;
-            case "CLAIM":
-              icon = Users;
-              title = "Will Claimed";
-              status = "Executed";
-              break;
-            case "WITHDRAWAL":
-              icon = Wallet;
-              title = "Withdrawal";
-              status = "Completed";
-              break;
-            default:
-              icon = Activity;
-              title = activity.activityType.replace("_", " ");
-          }
-
-          return {
-            id: `${activity.timestamp}-${index}`,
-            title,
-            description: activity.description || `${title} transaction`,
-            timestamp: activity.timestamp * 1000,
-            activityType: activity.activityType,
-            amount: formatBNB(amountBNB),
-            amountUSD: formatUSD(amountUSD),
-            status,
-            icon,
-          };
-        }),
-      );
-
-      setActivities(formattedActivities);
-      setActivitySummary(summary);
-    } catch (error) {
-      console.error("Error fetching user activity:", error);
-    } finally {
-      setLoadingActivity(false);
-    }
-  }, [account, getUserActivity, getUserActivitySummary]);
-
   const fetchWillData = useCallback(async () => {
     if (!account) return;
 
     setLoadingWillData(true);
     try {
-      const [hasWill, willData, contractBal] = await Promise.all([
-        hasCreatedWill(),
-        hasCreatedWill().then(async (has) => {
-          if (has) {
-            return await getNormalWill(account);
-          }
-          return null;
-        }),
+      const [hasWill, contractBal] = await Promise.all([
+        hasCreatedWill(account),
         getContractBalance(),
       ]);
+
+      let willData = null;
+      if (hasWill) {
+        willData = await getNormalWill(account);
+      }
 
       setUserWillData(hasWill ? willData : null);
       setContractBalance(contractBal);
 
       // Convert contract balance to USD
-      const contractUSD = await convertBNBToUSD(contractBal);
-      setContractBalanceUSD(contractUSD);
+      if (bnbPrice) {
+        const contractUSD = await convertBNBToUSD(contractBal);
+        setContractBalanceUSD(contractUSD);
+
+        // Convert user will amount to USD
+        if (willData && willData.amount) {
+          const willAmountBNB = parseFloat(willData.amount.toString()) / 1e18;
+          const willAmountUSD = await convertBNBToUSD(willAmountBNB);
+          setUserWillAmountUSD(willAmountUSD);
+        }
+      }
     } catch (error) {
       console.error("Error fetching will data:", error);
     } finally {
       setLoadingWillData(false);
     }
-  }, [account, hasCreatedWill, getNormalWill, getContractBalance]);
+  }, [account, hasCreatedWill, getNormalWill, getContractBalance, bnbPrice]);
+
+  const fetchClaimableWills = useCallback(async () => {
+    if (!account) return;
+
+    setLoadingClaimables(true);
+    try {
+      const claimables = await getNormalWillsAsBeneficiary(account);
+      setClaimableWills(claimables || []);
+    } catch (error) {
+      console.error("Error fetching claimable wills:", error);
+      setClaimableWills([]);
+    } finally {
+      setLoadingClaimables(false);
+    }
+  }, [account, getNormalWillsAsBeneficiary]);
 
   const updateBalanceUSD = useCallback(async () => {
     if (balance && bnbPrice) {
@@ -200,12 +136,15 @@ export default function DashboardPage() {
   }, [balance, bnbPrice]);
 
   useEffect(() => {
+    fetchBNBPrice();
+  }, []);
+
+  useEffect(() => {
     if (isConnected && account) {
-      fetchBNBPrice();
-      fetchUserActivity();
       fetchWillData();
+      fetchClaimableWills();
     }
-  }, [isConnected, account, fetchUserActivity, fetchWillData]);
+  }, [isConnected, account, fetchWillData, fetchClaimableWills]);
 
   useEffect(() => {
     updateBalanceUSD();
@@ -216,29 +155,51 @@ export default function DashboardPage() {
     const interval = setInterval(() => {
       if (isConnected && account) {
         fetchBNBPrice();
-        fetchUserActivity();
+        fetchWillData();
+        fetchClaimableWills();
       }
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [isConnected, account, fetchUserActivity]);
+  }, [isConnected, account, fetchWillData, fetchClaimableWills]);
 
   const formatAddress = (address: string) => {
     if (!address) return "";
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  const formatTime = (timestamp: number) => {
-    const now = Date.now();
-    const diff = now - timestamp;
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor(diff / (1000 * 60));
+  const getWillStatus = () => {
+    if (!userWillData) return { color: "text-gray-400", text: "No Will" };
+    if (userWillData.isClaimed)
+      return { color: "text-red-500", text: "Claimed" };
 
-    if (days > 0) return `${days}d ago`;
-    if (hours > 0) return `${hours}h ago`;
-    if (minutes > 0) return `${minutes}m ago`;
-    return "Just now";
+    const now = Math.floor(Date.now() / 1000);
+    const lastPing = Number(userWillData.lastPingTime);
+    const waitTime = Number(userWillData.claimWaitTime);
+    const timeUntilClaimable = lastPing + waitTime - now;
+
+    if (timeUntilClaimable <= 0)
+      return { color: "text-red-500", text: "Claimable" };
+    if (timeUntilClaimable <= waitTime * 0.1)
+      return { color: "text-yellow-500", text: "Action Needed" };
+    return { color: "text-green-500", text: "Active" };
+  };
+
+  const formatTimeUntilClaimable = () => {
+    if (!userWillData) return "N/A";
+
+    const now = Math.floor(Date.now() / 1000);
+    const lastPing = Number(userWillData.lastPingTime);
+    const waitTime = Number(userWillData.claimWaitTime);
+    const timeUntilClaimable = lastPing + waitTime - now;
+
+    if (timeUntilClaimable <= 0) return "Claimable now";
+
+    const days = Math.floor(timeUntilClaimable / (24 * 60 * 60));
+    const hours = Math.floor((timeUntilClaimable % (24 * 60 * 60)) / (60 * 60));
+
+    if (days > 0) return `${days}d ${hours}h`;
+    return `${hours}h`;
   };
 
   if (!isConnected) {
@@ -267,9 +228,25 @@ export default function DashboardPage() {
     );
   }
 
+  const willStatus = getWillStatus();
+
   return (
     <DashboardLayout>
       <div className="min-h-screen text-white p-6">
+        {/* Error Display */}
+        {walletError && (
+          <div className="mb-6">
+            <Card className="bg-red-900/20 border-red-500/50">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400" />
+                  <span className="text-red-400">{walletError}</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Header Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           {/* Wallet Balance */}
@@ -388,14 +365,16 @@ export default function DashboardPage() {
                   </div>
                   <div className="text-xs text-gray-400">
                     Updated:{" "}
-                    {bnbPrice ? formatTime(bnbPrice.timestamp) : "Never"}
+                    {bnbPrice
+                      ? new Date(bnbPrice.timestamp).toLocaleTimeString()
+                      : "Never"}
                   </div>
                 </div>
               </CardContent>
             </Card>
           </motion.div>
 
-          {/* Activity Summary */}
+          {/* Will Status */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -404,22 +383,24 @@ export default function DashboardPage() {
             <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
               <CardHeader className="pb-4">
                 <h3 className="text-white font-semibold flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-amber-400" />
-                  Activity
+                  <FileText className="w-5 h-5 text-amber-400" />
+                  Will Status
                 </h3>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <div className="text-2xl font-bold text-white">
-                    {activitySummary?.totalActivities || 0}
+                  <div className={`text-2xl font-bold ${willStatus.color}`}>
+                    {willStatus.text}
                   </div>
                   <div className="text-sm text-gray-300">
-                    {activitySummary?.hasActivity ? "Active" : "No Activity"}
+                    {userWillData
+                      ? formatTimeUntilClaimable()
+                      : "No will created"}
                   </div>
                   <div className="text-xs text-gray-400">
-                    {activitySummary?.lastActivityTime
-                      ? `Last: ${formatTime(activitySummary.lastActivityTime * 1000)}`
-                      : "No recent activity"}
+                    {userWillData
+                      ? `Created ${new Date(Number(userWillData.creationTime) * 1000).toLocaleDateString()}`
+                      : "Create your first will"}
                   </div>
                 </div>
               </CardContent>
@@ -429,7 +410,7 @@ export default function DashboardPage() {
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Recent Activity */}
+          {/* Your Will Information */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -439,63 +420,20 @@ export default function DashboardPage() {
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-white font-semibold flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-amber-400" />
-                    Recent Activity
+                    <FileText className="w-5 h-5 text-amber-400" />
+                    Your Will
                   </h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={fetchUserActivity}
-                    disabled={loadingActivity}
-                    className="text-gray-400 hover:text-amber-400 p-1"
-                  >
-                    <RefreshCw
-                      className={`w-4 h-4 ${loadingActivity ? "animate-spin" : ""}`}
-                    />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4 max-h-80 overflow-y-auto">
-                  {activities.length > 0 ? (
-                    activities.map((activity) => (
-                      <ActivityRow
-                        key={activity.id}
-                        icon={activity.icon}
-                        title={activity.title}
-                        description={activity.description}
-                        time={formatTime(activity.timestamp)}
-                        amount={activity.amount}
-                        amountUSD={activity.amountUSD}
-                        status={activity.status}
-                      />
-                    ))
-                  ) : (
-                    <div className="text-center py-8">
-                      <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                      <p className="text-gray-400">No recent activity</p>
-                      <p className="text-sm text-gray-500">
-                        Start by creating a will or making transactions
-                      </p>
-                    </div>
+                  {userWillData && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => (window.location.href = "/check-my-will")}
+                      className="text-gray-400 hover:text-amber-400 text-sm"
+                    >
+                      Manage →
+                    </Button>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Will Information */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-          >
-            <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
-              <CardHeader className="pb-4">
-                <h3 className="text-white font-semibold flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-amber-400" />
-                  Your Will Status
-                </h3>
               </CardHeader>
               <CardContent>
                 {userWillData ? (
@@ -510,13 +448,7 @@ export default function DashboardPage() {
                           )}
                         </div>
                         <div className="text-sm text-gray-400">
-                          {formatUSD(
-                            (parseFloat(
-                              userWillData.amount?.toString() || "0",
-                            ) /
-                              1e18) *
-                              (bnbPrice?.price || 0),
-                          )}
+                          {formatUSD(userWillAmountUSD)}
                         </div>
                       </div>
                     </div>
@@ -528,9 +460,25 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-gray-400">Status:</span>
-                      <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
-                        Active
+                      <Badge
+                        className={
+                          willStatus.color === "text-green-500"
+                            ? "bg-green-500/20 text-green-400 border-green-500/30"
+                            : willStatus.color === "text-yellow-500"
+                              ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                              : "bg-red-500/20 text-red-400 border-red-500/30"
+                        }
+                      >
+                        {willStatus.text}
                       </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Last Activity:</span>
+                      <span className="text-white text-sm">
+                        {new Date(
+                          Number(userWillData.lastPingTime) * 1000,
+                        ).toLocaleDateString()}
+                      </span>
                     </div>
                     <div className="mt-4 pt-4 border-t border-white/10">
                       <Button
@@ -547,10 +495,14 @@ export default function DashboardPage() {
                   <div className="text-center py-8">
                     <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                     <p className="text-gray-400 mb-4">No will created yet</p>
+                    <p className="text-sm text-gray-500 mb-4">
+                      Secure your digital assets for your loved ones
+                    </p>
                     <Button
                       className="bg-amber-500 hover:bg-amber-600 text-black font-medium transition-colors"
                       onClick={() => (window.location.href = "/create-will")}
                     >
+                      <Plus className="w-4 h-4 mr-2" />
                       Create Your Will
                     </Button>
                   </div>
@@ -558,46 +510,140 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </motion.div>
+
+          {/* Claimable Assets */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+          >
+            <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    <Users className="w-5 h-5 text-amber-400" />
+                    Claimable Assets
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
+                      {claimableWills.length}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={fetchClaimableWills}
+                      disabled={loadingClaimables}
+                      className="text-gray-400 hover:text-amber-400 p-1"
+                    >
+                      <RefreshCw
+                        className={`w-4 h-4 ${loadingClaimables ? "animate-spin" : ""}`}
+                      />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {claimableWills.length > 0 ? (
+                  <div className="space-y-3 max-h-80 overflow-y-auto">
+                    {claimableWills.map((will, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10"
+                      >
+                        <div>
+                          <div className="text-sm text-white font-medium">
+                            From: {formatAddress(will.owner)}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            Inheritance available
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm text-amber-400 font-medium">
+                            {formatBNB(will.amount)}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            Click to claim
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="mt-4 pt-4 border-t border-white/10">
+                      <Button
+                        className="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors"
+                        onClick={() => (window.location.href = "/claimables")}
+                      >
+                        View All Claimables
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-400 mb-2">No claimable assets</p>
+                    <p className="text-sm text-gray-500">
+                      Assets you can inherit will appear here
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
         </div>
+
+        {/* Quick Actions */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7 }}
+        >
+          <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl mt-6">
+            <CardHeader className="pb-4">
+              <h3 className="text-white font-semibold">Quick Actions</h3>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Button
+                  variant="outline"
+                  className="h-20 flex flex-col items-center justify-center space-y-2 bg-white/5 backdrop-blur border-white/20 hover:bg-white/10 hover:border-amber-400/50 transition-all"
+                  onClick={() => (window.location.href = "/create-will")}
+                >
+                  <FileText className="w-6 h-6 text-amber-400" />
+                  <span className="text-sm">Create Will</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-20 flex flex-col items-center justify-center space-y-2 bg-white/5 backdrop-blur border-white/20 hover:bg-white/10 hover:border-amber-400/50 transition-all"
+                  onClick={() => (window.location.href = "/check-my-will")}
+                >
+                  <Settings className="w-6 h-6 text-amber-400" />
+                  <span className="text-sm">Manage Will</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-20 flex flex-col items-center justify-center space-y-2 bg-white/5 backdrop-blur border-white/20 hover:bg-white/10 hover:border-amber-400/50 transition-all"
+                  onClick={() => (window.location.href = "/claimables")}
+                >
+                  <Users className="w-6 h-6 text-amber-400" />
+                  <span className="text-sm">Claim Assets</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-20 flex flex-col items-center justify-center space-y-2 bg-white/5 backdrop-blur border-white/20 hover:bg-white/10 hover:border-amber-400/50 transition-all"
+                  onClick={() => {
+                    fetchBNBPrice();
+                    fetchWillData();
+                    fetchClaimableWills();
+                  }}
+                >
+                  <RefreshCw className="w-6 h-6 text-amber-400" />
+                  <span className="text-sm">Refresh Data</span>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
     </DashboardLayout>
-  );
-}
-
-function ActivityRow({
-  icon: Icon,
-  title,
-  description,
-  time,
-  amount,
-  amountUSD,
-  status,
-}: {
-  icon: any;
-  title: string;
-  description: string;
-  time: string;
-  amount: string;
-  amountUSD: string;
-  status: string;
-}) {
-  return (
-    <div className="flex items-center justify-between py-3 border-b border-white/5 last:border-b-0">
-      <div className="flex items-center space-x-3">
-        <div className="w-8 h-8 bg-white/10 backdrop-blur border border-white/20 rounded-full flex items-center justify-center">
-          <Icon className="w-4 h-4 text-amber-400" />
-        </div>
-        <div>
-          <div className="text-sm text-white font-medium">{title}</div>
-          <div className="text-xs text-gray-400">{description}</div>
-          <div className="text-xs text-gray-500">{time}</div>
-        </div>
-      </div>
-      <div className="text-right">
-        <div className="text-sm text-white font-medium">{amount}</div>
-        <div className="text-xs text-gray-400">{amountUSD}</div>
-        <div className="text-xs text-green-500">{status}</div>
-      </div>
-    </div>
   );
 }
