@@ -1,17 +1,15 @@
-"use client"
-import { DotBackground } from "@/components/animateddots"
-import CreateSimpleWill from "@/components/CreateSimpleWill"
-
+"use client";
+import { DashboardLayout } from "@/components/layouts/dashboard-layout";
+import CreateSimpleWill from "@/components/CreateSimpleWill";
 
 export default function CreateSimpleWillPage() {
   return (
-    <DotBackground>
+    <DashboardLayout>
       <div className="min-h-screen">
         <div className="mx-auto px-4 py-8">
           <CreateSimpleWill />
         </div>
       </div>
-    </DotBackground>
-  )
+    </DashboardLayout>
+  );
 }
-
