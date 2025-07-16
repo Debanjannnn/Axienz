@@ -6,6 +6,12 @@ import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { useSmartWill } from "@/context/SmartWillContext";
 import {
+  getBNBPrice,
+  convertBNBToUSD,
+  formatUSD,
+  formatBNB,
+} from "@/utils/usdConversion";
+import {
   Loader2,
   PlusCircle,
   Clock,
@@ -17,6 +23,8 @@ import {
   Coins,
   Shield,
   History,
+  RefreshCw,
+  Activity,
 } from "lucide-react";
 import {
   Card,
@@ -36,6 +44,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
+import { Badge } from "@/components/ui/badge";
 
 interface Will {
   beneficiary: string;
@@ -58,6 +67,13 @@ const CheckMyWill = () => {
   const [isPinging, setIsPinging] = useState(false);
   const [lastPingTimeAgo, setLastPingTimeAgo] = useState("");
   const [withdrawalAvailable, setWithdrawalAvailable] = useState(false);
+  const [bnbPrice, setBnbPrice] = useState<number | null>(null);
+  const [amountUSD, setAmountUSD] = useState(0);
+  const [depositAmountUSD, setDepositAmountUSD] = useState(0);
+  const [loadingPrice, setLoadingPrice] = useState(false);
+  const [userActivity, setUserActivity] = useState<any[]>([]);
+  const [activitySummary, setActivitySummary] = useState<any>(null);
+  const [loadingActivity, setLoadingActivity] = useState(false);
 
   const {
     account,
@@ -67,8 +83,64 @@ const CheckMyWill = () => {
     depositNormalWill,
     withdrawNormalWill,
     hasCreatedWill,
+    getUserActivity,
+    getUserActivitySummary,
+    loading: contextLoading,
+    error: contextError,
   } = useSmartWill();
+
   const router = useRouter();
+
+  // Fetch BNB price
+  const fetchBNBPrice = useCallback(async () => {
+    setLoadingPrice(true);
+    try {
+      const price = await getBNBPrice();
+      setBnbPrice(price);
+    } catch (error) {
+      console.error("Error fetching BNB price:", error);
+    } finally {
+      setLoadingPrice(false);
+    }
+  }, []);
+
+  // Calculate USD values
+  const calculateUSDValues = useCallback(async () => {
+    if (bnbPrice) {
+      if (willDetails) {
+        const bnbAmount = Number(willDetails.amount) / 1e18;
+        const usd = await convertBNBToUSD(bnbAmount);
+        setAmountUSD(usd);
+      }
+
+      if (depositAmount) {
+        const depositUsd = await convertBNBToUSD(depositAmount);
+        setDepositAmountUSD(depositUsd);
+      } else {
+        setDepositAmountUSD(0);
+      }
+    }
+  }, [bnbPrice, willDetails, depositAmount]);
+
+  // Fetch user activity
+  const fetchUserActivity = useCallback(async () => {
+    if (!account) return;
+
+    setLoadingActivity(true);
+    try {
+      const [activity, summary] = await Promise.all([
+        getUserActivity(account, 0, 5),
+        getUserActivitySummary(account),
+      ]);
+
+      setUserActivity(activity.activities || []);
+      setActivitySummary(summary);
+    } catch (error) {
+      console.error("Error fetching user activity:", error);
+    } finally {
+      setLoadingActivity(false);
+    }
+  }, [account, getUserActivity, getUserActivitySummary]);
 
   const fetchWillDetails = useCallback(async () => {
     setLoading(true);
@@ -92,24 +164,40 @@ const CheckMyWill = () => {
   };
 
   useEffect(() => {
+    fetchBNBPrice();
+  }, [fetchBNBPrice]);
+
+  useEffect(() => {
+    calculateUSDValues();
+  }, [calculateUSDValues]);
+
+  useEffect(() => {
     async function checkAndFetchWill() {
       if (!account) {
         connectWallet();
         return;
       }
+
       const hasWill = await hasCreatedWill(account);
 
       if (!hasWill) {
-        // Redirect to create will page if the user has not created a will
         router.push("/create-will/simple");
       } else {
         fetchWillDetails();
+        fetchUserActivity();
       }
     }
     checkAndFetchWill();
-  }, [account, connectWallet, fetchWillDetails, hasCreatedWill, router]);
+  }, [
+    account,
+    connectWallet,
+    fetchWillDetails,
+    fetchUserActivity,
+    hasCreatedWill,
+    router,
+  ]);
 
-  // New effect for updating the countdown timer using the latest willDetails data.
+  // Update countdown timer
   useEffect(() => {
     if (!willDetails) return;
 
@@ -120,12 +208,10 @@ const CheckMyWill = () => {
       const remainingTime = lastPingTime + claimWaitTime - now;
       const totalTime = claimWaitTime;
 
-      // Calculate progress percentage.
       const elapsed = Number(claimWaitTime - remainingTime);
       const progress = Math.min(100, (elapsed / Number(totalTime)) * 100);
       setTimeProgress(progress);
 
-      // Calculate time since last ping.
       const timeSinceLastPing = now - lastPingTime;
       const daysAgo = Number(timeSinceLastPing / BigInt(24 * 60 * 60));
       setLastPingTimeAgo(
@@ -149,7 +235,6 @@ const CheckMyWill = () => {
       }
     };
 
-    // Initialize and update every second.
     updateCounter();
     const interval = setInterval(updateCounter, 1000);
     return () => clearInterval(interval);
@@ -181,6 +266,7 @@ const CheckMyWill = () => {
     try {
       await ping();
       await fetchWillDetails();
+      await fetchUserActivity();
     } catch (err) {
       setError("Failed to confirm activity. Please try again.");
     } finally {
@@ -198,7 +284,7 @@ const CheckMyWill = () => {
     }
   };
 
-  // Show loader if wallet is not connected.
+  // Show loader if wallet is not connected
   if (!account) {
     return (
       <DashboardLayout>
@@ -214,16 +300,23 @@ const CheckMyWill = () => {
     );
   }
 
-  if (error) {
+  if (error && !willDetails) {
     return (
-      <Alert variant="destructive" className="max-w-2xl mx-auto mt-8">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-screen p-4">
+          <Alert
+            variant="destructive"
+            className="max-w-2xl bg-red-900/20 border-red-500/50"
+          >
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </div>
+      </DashboardLayout>
     );
   }
 
-  // If no will details are found after wallet connection, show "No Will Found" screen.
+  // If no will details are found after wallet connection
   if (!willDetails) {
     return (
       <DashboardLayout>
@@ -262,149 +355,346 @@ const CheckMyWill = () => {
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen flex items-center justify-center px-4 py-8">
+      <div className="min-h-screen p-6">
         <AnimatePresence>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.5 }}
+            className="max-w-6xl mx-auto"
           >
-            <Card className="max-w-4xl mx-auto overflow-hidden bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
-              <CardHeader className="bg-transparent text-white">
+            {/* Header Card */}
+            <Card className="mb-6 bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+              <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-3xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-orange-500">
-                    Digital Will Dashboard
-                  </CardTitle>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <div
-                          className={`flex items-center gap-2 ${status.color}`}
-                        >
-                          <Shield className="w-6 h-6" />
-                          <span className="text-sm font-semibold">
-                            {status.text}
-                          </span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Last activity: {lastPingTimeAgo}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <div>
+                    <CardTitle className="text-3xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-orange-500">
+                      Digital Will Dashboard
+                    </CardTitle>
+                    <p className="text-gray-400 mt-1">
+                      Manage your blockchain-secured digital will
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <div
+                            className={`flex items-center gap-2 ${status.color}`}
+                          >
+                            <Shield className="w-6 h-6" />
+                            <span className="text-sm font-semibold">
+                              {status.text}
+                            </span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent className="bg-gray-800 border-white/20">
+                          <p>Last activity: {lastPingTimeAgo}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        fetchWillDetails();
+                        fetchUserActivity();
+                        fetchBNBPrice();
+                      }}
+                      disabled={loading || loadingActivity || loadingPrice}
+                      className="text-gray-400 hover:text-amber-400"
+                    >
+                      <RefreshCw
+                        className={`w-4 h-4 ${loading || loadingActivity || loadingPrice ? "animate-spin" : ""}`}
+                      />
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
-              <CardContent className="p-6 space-y-8">
-                <div className="grid md:grid-cols-2 gap-6">
-                  <InfoCard
-                    icon={User}
-                    title="Beneficiary"
-                    content={willDetails.beneficiary}
-                  />
-                  <InfoCard
-                    icon={Coins}
-                    title="Amount Secured"
-                    content={`${Number(willDetails.amount) / 1e18} BNB`}
-                  />
-                  <InfoCard
-                    icon={Calendar}
-                    title="Created On"
-                    content={new Date(
-                      Number(willDetails.creationTime) * 1000,
-                    ).toLocaleDateString(undefined, {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  />
-                  <InfoCard
-                    icon={History}
-                    title="Last Activity"
-                    content={`${lastPingTimeAgo} (${new Date(Number(willDetails.lastPingTime) * 1000).toLocaleString()})`}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <Clock className="w-5 h-5" />
-                    Time Until Claim
-                  </h3>
-                  <div className="bg-secondary p-4 rounded-lg">
-                    <p className="text-4xl font-mono mb-2">{timeRemaining}</p>
-                    <Progress value={timeProgress} className="h-2" />
-                  </div>
-                </div>
-
-                <div className="bg-secondary rounded-lg p-4">
-                  <h3 className="font-semibold mb-2 flex items-center gap-2">
-                    <FileText className="w-5 h-5" />
-                    Will Description
-                  </h3>
-                  <p className="text-sm">{willDetails.description}</p>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-4">
-                    <form onSubmit={handleDeposit} className="space-y-2">
-                      <div className="flex gap-2">
-                        <Input
-                          type="number"
-                          step="0.000000000000000001"
-                          min="0"
-                          placeholder="Amount in BNB"
-                          value={depositAmount}
-                          onChange={(e) => setDepositAmount(e.target.value)}
-                          className="flex-grow"
-                        />
-                        <Button
-                          type="submit"
-                          disabled={
-                            isDepositing ||
-                            !depositAmount ||
-                            parseFloat(depositAmount) <= 0
-                          }
-                          className="whitespace-nowrap"
-                        >
-                          {isDepositing ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <>
-                              <Wallet className="w-4 h-4 mr-2" />
-                              Add Funds
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    </form>
-                    {withdrawalAvailable && (
-                      <Button
-                        onClick={handleWithdraw}
-                        variant="outline"
-                        className="w-full"
-                      >
-                        Withdraw Funds
-                      </Button>
-                    )}
-                  </div>
-                  <Button
-                    onClick={handlePing}
-                    disabled={isPinging || willDetails.isClaimed}
-                    variant="secondary"
-                    className="w-full h-full"
-                  >
-                    {isPinging ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Clock className="w-4 h-4 mr-2" />
-                        Confirm Activity
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
             </Card>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Will Information */}
+              <div className="lg:col-span-2 space-y-6">
+                {/* Will Details */}
+                <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-amber-400" />
+                      Will Details
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <InfoCard
+                        icon={User}
+                        title="Beneficiary"
+                        content={willDetails.beneficiary}
+                      />
+                      <InfoCard
+                        icon={Coins}
+                        title="Amount Secured"
+                        content={
+                          <div>
+                            <div className="text-lg font-semibold">
+                              {formatBNB(Number(willDetails.amount) / 1e18)}
+                            </div>
+                            <div className="text-sm text-gray-400">
+                              {formatUSD(amountUSD)}
+                            </div>
+                          </div>
+                        }
+                      />
+                      <InfoCard
+                        icon={Calendar}
+                        title="Created On"
+                        content={new Date(
+                          Number(willDetails.creationTime) * 1000,
+                        ).toLocaleDateString(undefined, {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      />
+                      <InfoCard
+                        icon={History}
+                        title="Last Activity"
+                        content={`${lastPingTimeAgo} (${new Date(Number(willDetails.lastPingTime) * 1000).toLocaleString()})`}
+                      />
+                    </div>
+
+                    {/* Time Until Claim */}
+                    <div className="space-y-3">
+                      <h3 className="font-semibold flex items-center gap-2 text-white">
+                        <Clock className="w-5 h-5 text-amber-400" />
+                        Time Until Claim
+                      </h3>
+                      <div className="bg-white/5 backdrop-blur border border-white/10 p-4 rounded-lg">
+                        <p className="text-3xl font-mono mb-3 text-white">
+                          {timeRemaining}
+                        </p>
+                        <Progress
+                          value={timeProgress}
+                          className="h-2 bg-gray-700"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Will Description */}
+                    <div className="bg-white/5 backdrop-blur border border-white/10 rounded-lg p-4">
+                      <h3 className="font-semibold mb-2 flex items-center gap-2 text-white">
+                        <FileText className="w-5 h-5 text-amber-400" />
+                        Will Description
+                      </h3>
+                      <p className="text-sm text-gray-300">
+                        {willDetails.description}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Actions */}
+                <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <Wallet className="w-5 h-5 text-amber-400" />
+                      Manage Will
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {/* Deposit */}
+                      <div className="space-y-4">
+                        <h3 className="font-medium text-white">Add Funds</h3>
+                        <form onSubmit={handleDeposit} className="space-y-3">
+                          <div className="space-y-2">
+                            <Input
+                              type="number"
+                              step="0.000000000000000001"
+                              min="0"
+                              placeholder="Amount in BNB"
+                              value={depositAmount}
+                              onChange={(e) => setDepositAmount(e.target.value)}
+                              className="bg-white/5 border-white/20 text-white placeholder:text-gray-500"
+                            />
+                            {depositAmount && bnbPrice && (
+                              <p className="text-sm text-gray-400">
+                                ≈ {formatUSD(depositAmountUSD)}
+                              </p>
+                            )}
+                          </div>
+                          <Button
+                            type="submit"
+                            disabled={
+                              isDepositing ||
+                              !depositAmount ||
+                              parseFloat(depositAmount) <= 0
+                            }
+                            className="w-full bg-amber-500 hover:bg-amber-600 text-black font-medium"
+                          >
+                            {isDepositing ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Adding Funds...
+                              </>
+                            ) : (
+                              <>
+                                <Wallet className="w-4 h-4 mr-2" />
+                                Add Funds
+                              </>
+                            )}
+                          </Button>
+                        </form>
+
+                        {withdrawalAvailable && (
+                          <Button
+                            onClick={handleWithdraw}
+                            variant="outline"
+                            className="w-full border-white/20 text-white hover:bg-white/10"
+                          >
+                            Withdraw Funds
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Activity Ping */}
+                      <div className="space-y-4">
+                        <h3 className="font-medium text-white">
+                          Confirm Activity
+                        </h3>
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-400">
+                            Regular activity prevents your beneficiary from
+                            claiming early. Ping to reset the timer.
+                          </p>
+                          <Button
+                            onClick={handlePing}
+                            disabled={isPinging || willDetails.isClaimed}
+                            className="w-full bg-green-600 hover:bg-green-700 text-white"
+                          >
+                            {isPinging ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Confirming...
+                              </>
+                            ) : (
+                              <>
+                                <Activity className="w-4 h-4 mr-2" />
+                                Confirm Activity
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {error && (
+                      <Alert
+                        variant="destructive"
+                        className="mt-4 bg-red-900/20 border-red-500/50"
+                      >
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{error}</AlertDescription>
+                      </Alert>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Sidebar */}
+              <div className="space-y-6">
+                {/* BNB Price */}
+                <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2 text-lg">
+                      <Coins className="w-5 h-5 text-amber-400" />
+                      BNB Price
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-white mb-2">
+                      ${bnbPrice ? bnbPrice.toFixed(2) : "Loading..."}
+                    </div>
+                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                      Live
+                    </Badge>
+                  </CardContent>
+                </Card>
+
+                {/* Activity Summary */}
+                <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-white flex items-center gap-2 text-lg">
+                        <Activity className="w-5 h-5 text-amber-400" />
+                        Recent Activity
+                      </CardTitle>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={fetchUserActivity}
+                        disabled={loadingActivity}
+                        className="text-gray-400 hover:text-amber-400 p-1"
+                      >
+                        <RefreshCw
+                          className={`w-3 h-3 ${loadingActivity ? "animate-spin" : ""}`}
+                        />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {userActivity.length > 0 ? (
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {userActivity.map((activity, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between py-2 border-b border-white/10 last:border-b-0"
+                          >
+                            <div>
+                              <p className="text-sm text-white font-medium">
+                                {activity.activityType
+                                  .replace("_", " ")
+                                  .toLowerCase()
+                                  .replace(/\b\w/g, (l) => l.toUpperCase())}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                {new Date(
+                                  activity.timestamp * 1000,
+                                ).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs text-amber-400">
+                                {formatBNB(parseFloat(activity.amount) / 1e18)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-400 text-center py-4">
+                        No recent activity
+                      </p>
+                    )}
+
+                    {activitySummary && (
+                      <div className="pt-3 border-t border-white/10">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">
+                            Total Activities:
+                          </span>
+                          <span className="text-white">
+                            {activitySummary.totalActivities}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </motion.div>
         </AnimatePresence>
       </div>
@@ -420,17 +710,17 @@ const InfoCard = ({
   className = "",
 }) => (
   <div
-    className={`p-4 rounded-lg ${highlight ? "bg-primary text-primary-foreground" : "bg-secondary"}`}
+    className={`p-4 rounded-lg border border-white/10 ${highlight ? "bg-amber-500/20 text-amber-100" : "bg-white/5"}`}
   >
-    <h3 className="font-semibold mb-2 flex items-center gap-2">
-      <Icon className="w-5 h-5" />
+    <h3 className="font-semibold mb-2 flex items-center gap-2 text-white">
+      <Icon className="w-4 h-4 text-amber-400" />
       {title}
     </h3>
-    <p
-      className={`${highlight ? "text-4xl font-mono" : "text-sm"} break-all ${className}`}
+    <div
+      className={`${highlight ? "text-2xl font-mono" : "text-sm"} break-all ${className} text-white`}
     >
       {content}
-    </p>
+    </div>
   </div>
 );
 
