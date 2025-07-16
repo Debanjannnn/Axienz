@@ -57,7 +57,10 @@ export default function Home() {
         <HeroSection />
       </div>
 
-       {/* <Features /> */}
+      <div className="bg-[#0d0f12]">
+        <Features />
+      </div>
+
         <WillInfo />
 
         {/* FAQ section: no special background, make FAQ extra wide and centered */}
