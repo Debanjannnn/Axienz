@@ -109,148 +109,155 @@ export default function WillDetails() {
 
   if (!isConnected || loading) {
     return (
-      <div className="container mx-auto p-6 max-w-4xl">
-        <Card>
-          <CardContent className="flex items-center justify-center p-6">
-            <Loader2 className="h-8 w-8 animate-spin" />
-          </CardContent>
-        </Card>
-      </div>
+      <DashboardLayout>
+        <div className="container mx-auto p-6 max-w-4xl">
+          <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+            <CardContent className="flex items-center justify-center p-6">
+              <Loader2 className="h-8 w-8 animate-spin text-amber-400" />
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
     );
   }
 
   if (!will) {
     return (
-      <div className="container mx-auto p-6 max-w-4xl">
-        <Card>
-          <CardContent className="p-6 text-center text-muted-foreground">
-            Will not found
-          </CardContent>
-        </Card>
-      </div>
+      <DashboardLayout>
+        <div className="container mx-auto p-6 max-w-4xl">
+          <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+            <CardContent className="p-6 text-center text-gray-400">
+              Will not found
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl space-y-6">
-      {(error || walletError) && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error || walletError}</AlertDescription>
-        </Alert>
-      )}
+    <DashboardLayout>
+      <div className="container mx-auto p-6 max-w-4xl space-y-6">
+        {(error || walletError) && (
+          <Alert
+            variant="destructive"
+            className="bg-red-800/80 backdrop-blur-md border-red-600/50"
+          >
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error || walletError}</AlertDescription>
+          </Alert>
+        )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-3xl font-display">
-            Academic Legacy Details
-          </CardTitle>
-          <CardDescription>
-            View and claim your designated academic assets
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid gap-4">
-            <div className="flex items-center justify-between">
+        <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+          <CardHeader>
+            <CardTitle className="text-3xl font-display bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-orange-500">
+              Academic Legacy Details
+            </CardTitle>
+            <CardDescription className="text-gray-400">
+              View and claim your designated academic assets
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid gap-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <div className="text-sm text-gray-400">Testator</div>
+                  <div className="font-medium text-white">{will.testator}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-amber-400">
+                    {will.amount} BNB
+                  </div>
+                  <div className="text-sm text-gray-400">Token Amount</div>
+                </div>
+              </div>
+
               <div className="space-y-1">
-                <div className="text-sm text-muted-foreground">Testator</div>
-                <div className="font-medium">{will.testator}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold">{will.amount} BNB</div>
-                <div className="text-sm text-muted-foreground">
-                  Token Amount
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">
-                Assets Description
-              </div>
-              <div className="p-4 bg-muted rounded-lg">
-                <div className="flex items-start gap-2">
-                  <ScrollText className="h-4 w-4 mt-1" />
-                  <div>{will.assets}</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <div className="text-sm text-muted-foreground">Timeline</div>
-              <div className="p-4 bg-muted rounded-lg space-y-2">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  <div>
-                    Created{" "}
-                    {formatDistanceToNow(will.createdAt, { addSuffix: true })}
+                <div className="text-sm text-gray-400">Assets Description</div>
+                <div className="p-4 bg-white/5 backdrop-blur rounded-lg border border-white/10">
+                  <div className="flex items-start gap-2">
+                    <ScrollText className="h-4 w-4 mt-1 text-amber-400" />
+                    <div className="text-white">{will.assets}</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {isClaimable(will.createdAt, will.claimWaitTime) ? (
-                    <>
-                      <Check className="h-4 w-4 text-green-500" />
-                      <div className="text-green-500">
-                        Claim period has started
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <Lock className="h-4 w-4" />
-                      <div>
-                        Claimable{" "}
-                        {getTimeRemaining(will.createdAt, will.claimWaitTime)}
-                      </div>
-                    </>
-                  )}
+              </div>
+
+              <div className="grid gap-2">
+                <div className="text-sm text-gray-400">Timeline</div>
+                <div className="p-4 bg-white/5 backdrop-blur rounded-lg border border-white/10 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-amber-400" />
+                    <div className="text-white">
+                      Created{" "}
+                      {formatDistanceToNow(will.createdAt, { addSuffix: true })}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isClaimable(will.createdAt, will.claimWaitTime) ? (
+                      <>
+                        <Check className="h-4 w-4 text-green-500" />
+                        <div className="text-green-500">
+                          Claim period has started
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="h-4 w-4" />
+                        <div>
+                          Claimable{" "}
+                          {getTimeRemaining(will.createdAt, will.claimWaitTime)}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </CardContent>
-        <CardFooter className="flex flex-col gap-4">
-          <div className="flex items-start gap-2 text-sm text-muted-foreground bg-muted p-4 rounded-lg w-full">
-            <Info className="h-4 w-4 mt-1" />
-            <div>
-              This academic legacy can only be claimed by the designated
-              beneficiary address. Ensure you are connected with the correct
-              wallet before claiming.
+          </CardContent>
+          <CardFooter className="flex flex-col gap-4">
+            <div className="flex items-start gap-2 text-sm text-gray-400 bg-white/5 backdrop-blur border border-white/10 p-4 rounded-lg w-full">
+              <Info className="h-4 w-4 mt-1 text-amber-400" />
+              <div>
+                This academic legacy can only be claimed by the designated
+                beneficiary address. Ensure you are connected with the correct
+                wallet before claiming.
+              </div>
             </div>
-          </div>
-          <Button
-            className="w-full"
-            size="lg"
-            onClick={handleClaim}
-            disabled={
-              !isClaimable(will.createdAt, will.claimWaitTime) ||
-              claiming ||
-              will.claimed
-            }
-          >
-            {claiming ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Claiming...
-              </>
-            ) : will.claimed ? (
-              <>
-                <Check className="mr-2 h-4 w-4" />
-                Already Claimed
-              </>
-            ) : !isClaimable(will.createdAt, will.claimWaitTime) ? (
-              <>
-                <Lock className="mr-2 h-4 w-4" />
-                Not Yet Claimable
-              </>
-            ) : (
-              <>
-                <Shield className="mr-2 h-4 w-4" />
-                Claim Academic Legacy
-              </>
-            )}
-          </Button>
-        </CardFooter>
-      </Card>
-    </div>
+            <Button
+              className="w-full bg-amber-500 hover:bg-amber-600 text-black"
+              size="lg"
+              onClick={handleClaim}
+              disabled={
+                !isClaimable(will.createdAt, will.claimWaitTime) ||
+                claiming ||
+                will.claimed
+              }
+            >
+              {claiming ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Claiming...
+                </>
+              ) : will.claimed ? (
+                <>
+                  <Check className="mr-2 h-4 w-4" />
+                  Already Claimed
+                </>
+              ) : !isClaimable(will.createdAt, will.claimWaitTime) ? (
+                <>
+                  <Lock className="mr-2 h-4 w-4" />
+                  Not Yet Claimable
+                </>
+              ) : (
+                <>
+                  <Shield className="mr-2 h-4 w-4" />
+                  Claim Academic Legacy
+                </>
+              )}
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    </DashboardLayout>
   );
 }
