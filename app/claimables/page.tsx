@@ -366,8 +366,8 @@ export default function Claimables() {
                   No Claimable Assets Found
                 </h3>
                 <p className="text-gray-400 mb-6">
-                  You don't have any digital inheritances available for claiming
-                  at this time.
+                  You don&apos;t have any digital inheritances available for
+                  claiming at this time.
                 </p>
                 <Button
                   onClick={() => router.push("/create-will")}
@@ -559,7 +559,7 @@ export default function Claimables() {
                 <div className="w-2 h-2 bg-amber-400 rounded-full mt-2"></div>
                 <p>
                   Claiming requires a network transaction fee (gas fee) which
-                  you'll need to pay.
+                  you&apos;ll need to pay.
                 </p>
               </div>
               <div className="flex items-start gap-3">
