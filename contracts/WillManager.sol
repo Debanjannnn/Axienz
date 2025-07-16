@@ -1,278 +1,472 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
-contract WillManager {
+contract SmartWill {
     struct Will {
-        address beneficiary;
-        uint256 amount;
-        uint256 lastPingTime;
-        uint256 claimWaitTime; // Custom claim wait time in seconds
-        uint256 creationTime;
+        uint256 startTime;
+        uint256 lastVisited;
+        uint256 tenYears;
+        address payable recipient;
         string description;
-        bool isClaimed;
+        bool exists;
+        uint256 totalDeposited;  // Track total amount deposited
+        uint256 depositCount;    // Track number of deposits
     }
 
-    struct MilestoneRelease {
-        address beneficiary;
-        uint256 releaseTime;
-        uint256 releasePercentage;
-        string description;
-        bool isClaimed;
+    struct Activity {
+        uint256 timestamp;
+        string activityType;     // "CREATED", "PING", "DEPOSIT", "RECIPIENT_CHANGED", "CLAIMED"
+        uint256 amount;          // Amount involved (0 for non-monetary activities)
+        address relatedAddress;  // Recipient address for context
+        string description;      // Activity description
     }
 
-    struct MilestoneWill {
-        uint256 totalAmount;
-        uint256 claimedAmount;
-        MilestoneRelease[] releases;
-        bool isFullyClaimed;
+    struct UserActivity {
+        bool hasActivity;
+        Activity[] activities;
+        uint256 totalActivities;
+        uint256 lastActivityTime;
     }
 
-    mapping(address => Will) public normalWills;
-    mapping(address => MilestoneWill[]) public milestoneWills;
-    mapping(address => bool) public hasNormalWill;
+    mapping(address => Will) public wills;
+    mapping(address => UserActivity) private userActivities;
+    address[] private willCreators;
 
-    mapping(address => bool) private isInWillOwners;
-    address[] private willOwners;
+    // Events
+    event WillCreated(address indexed creator, address indexed recipient, uint256 amount, string description);
+    event Ping(address indexed creator, uint256 timestamp);
+    event Claimed(address indexed recipient, uint256 amount, address indexed creator);
+    event RecipientChanged(address indexed creator, address indexed oldRecipient, address indexed newRecipient);
+    event DepositMade(address indexed creator, uint256 amount, address indexed recipient);
+    event ActivityRecorded(address indexed user, string activityType, uint256 timestamp);
 
-    address public platformWallet;
-    uint256 public platformFeePercentage;
-
-    event WillCreated(address indexed user, address indexed beneficiary, uint256 amount, string description, uint256 claimWaitTime);
-    event MilestoneWillCreated(address indexed user, uint256 totalAmount);
-    event WillClaimed(address indexed beneficiary, uint256 amount);
-    event MilestoneClaimed(address indexed beneficiary, uint256 amount);
-    event Ping(address indexed user);
-    event RecipientUpdated(address indexed user, address indexed newRecipient);
-    event DepositMade(address indexed user, uint256 amount);
-    event UnclaimedWillDistributed(address indexed originalOwner, address indexed newOwner, uint256 amount);
-    event WillWithdrawn(address indexed owner, uint256 amount);
-
-    modifier onlyNormalWillOwner() {
-        require(hasNormalWill[msg.sender], "No normal will exists");
+    modifier willExists(address creator) {
+        require(wills[creator].exists, "Will doesn't exist!");
         _;
     }
 
-    constructor(address _platformWallet, uint256 _platformFeePercentage) {
-        platformWallet = _platformWallet;
-        platformFeePercentage = _platformFeePercentage;
+    modifier onlyRecipient(address creator) {
+        require(msg.sender == wills[creator].recipient, "Caller is not the recipient");
+        _;
     }
 
-    function createNormalWill(address payable _beneficiary, string memory _description, uint256 _claimWaitTime) external payable {
-        require(!hasNormalWill[msg.sender], "Normal will already exists");
-        require(_beneficiary != address(0), "Invalid beneficiary");
-        require(msg.sender != _beneficiary, "Owner cannot be beneficiary");
-        require(msg.value > 0, "Amount must be > 0");
-        require(bytes(_description).length >= 50, "Description too short");
-        require(_claimWaitTime >= 60, "Minimum claim wait time is 60 seconds"); // At least 1 minute
+    modifier onlyWillOwner() {
+        require(wills[msg.sender].exists, "Will doesn't exist!");
+        _;
+    }
 
-        uint256 platformFee = (msg.value * platformFeePercentage) / 100;
-        uint256 willAmount = msg.value - platformFee;
+    // New modifier to check if will time has passed
+    modifier willNotExpired(address creator) {
+        require(block.timestamp <= wills[creator].lastVisited + wills[creator].tenYears, "Will has expired - only beneficiary can claim");
+        _;
+    }
 
-        payable(platformWallet).transfer(platformFee);
+    // New modifier to check if will time has passed (for claim function)
+    modifier willExpired(address creator) {
+        require(block.timestamp > wills[creator].lastVisited + wills[creator].tenYears, "Owner is still active");
+        _;
+    }
 
-        normalWills[msg.sender] = Will({
-            beneficiary: _beneficiary,
-            amount: willAmount,
-            lastPingTime: block.timestamp,
-            claimWaitTime: _claimWaitTime,
-            creationTime: block.timestamp,
-            description: _description,
-            isClaimed: false
+    // Internal function to record user activity
+    function _recordActivity(
+        address user,
+        string memory activityType,
+        uint256 amount,
+        address relatedAddress,
+        string memory description
+    ) internal {
+        UserActivity storage userActivity = userActivities[user];
+        
+        if (!userActivity.hasActivity) {
+            userActivity.hasActivity = true;
+        }
+
+        Activity memory newActivity = Activity({
+            timestamp: block.timestamp,
+            activityType: activityType,
+            amount: amount,
+            relatedAddress: relatedAddress,
+            description: description
         });
 
-        hasNormalWill[msg.sender] = true;
-        _addToWillOwners(msg.sender);
+        userActivity.activities.push(newActivity);
+        userActivity.totalActivities++;
+        userActivity.lastActivityTime = block.timestamp;
 
-        emit WillCreated(msg.sender, _beneficiary, willAmount, _description, _claimWaitTime);
+        emit ActivityRecorded(user, activityType, block.timestamp);
     }
 
-    function createMilestoneWill(
-        address[] memory _beneficiaries,
-        uint256[] memory _releaseTimes,
-        uint256[] memory _releasePercentages,
-        string[] memory _descriptions
-    ) external payable {
-        require(_beneficiaries.length > 0, "Invalid beneficiaries");
-        require(msg.value > 0, "Amount must be > 0");
+    function createWill(address payable _recipient, string memory _description) external payable {
+        require(!wills[msg.sender].exists, "Will already exists for sender");
+        require(_recipient != address(0), "Recipient cannot be zero address");
+        require(msg.sender != _recipient, "Owner cannot be the recipient");
+        require(msg.value > 0, "Initial deposit required");
+        require(bytes(_description).length >= 50, "Description must be at least 50 characters");
 
-        uint256 platformFee = (msg.value * platformFeePercentage) / 100;
-        uint256 willAmount = msg.value - platformFee;
+        wills[msg.sender] = Will({
+            startTime: block.timestamp,
+            lastVisited: block.timestamp,
+            tenYears: 10 * 365 days,
+            recipient: _recipient,
+            description: _description,
+            exists: true,
+            totalDeposited: msg.value,
+            depositCount: 1
+        });
 
-        payable(platformWallet).transfer(platformFee);
+        willCreators.push(msg.sender);
 
-        MilestoneWill storage newWill = milestoneWills[msg.sender].push();
-        newWill.totalAmount = willAmount;
-        newWill.claimedAmount = 0;
-        newWill.isFullyClaimed = false;
+        // Record activity for will creator
+        _recordActivity(
+            msg.sender,
+            "CREATED",
+            msg.value,
+            _recipient,
+            string(abi.encodePacked("Created will with initial deposit of ", _uint2str(msg.value), " wei for recipient"))
+        );
 
-        for (uint256 i = 0; i < _releaseTimes.length; i++) {
-            newWill.releases.push(MilestoneRelease({
-                beneficiary: _beneficiaries[i],
-                releaseTime: _releaseTimes[i],
-                releasePercentage: _releasePercentages[i],
-                description: _descriptions[i],
-                isClaimed: false
-            }));
+        // Record activity for recipient (they can see they were added as beneficiary)
+        _recordActivity(
+            _recipient,
+            "BENEFICIARY_ADDED",
+            msg.value,
+            msg.sender,
+            string(abi.encodePacked("Added as beneficiary to will created by ", _addressToString(msg.sender)))
+        );
+
+        emit WillCreated(msg.sender, _recipient, msg.value, _description);
+    }
+
+    function ping() external onlyWillOwner willExists(msg.sender) willNotExpired(msg.sender) {
+        wills[msg.sender].lastVisited = block.timestamp;
+
+        _recordActivity(
+            msg.sender,
+            "PING",
+            0,
+            wills[msg.sender].recipient,
+            "Updated will activity status"
+        );
+
+        emit Ping(msg.sender, block.timestamp);
+    }
+
+    function claim(address creator) external willExists(creator) onlyRecipient(creator) willExpired(creator) {
+        Will storage willData = wills[creator];
+        require(address(this).balance > 0, "No funds to claim");
+
+        uint256 amount = address(this).balance;
+        address recipient = willData.recipient;
+
+        // Record activity for both creator and recipient
+        _recordActivity(
+            creator,
+            "CLAIMED_FROM",
+            amount,
+            recipient,
+            string(abi.encodePacked("Will claimed by recipient for ", _uint2str(amount), " wei"))
+        );
+
+        _recordActivity(
+            recipient,
+            "CLAIMED",
+            amount,
+            creator,
+            string(abi.encodePacked("Claimed will from ", _addressToString(creator), " for ", _uint2str(amount), " wei"))
+        );
+
+        willData.recipient.transfer(amount);
+
+        // Remove the will from the creators array
+        for(uint i = 0; i < willCreators.length; i++) {
+            if(willCreators[i] == creator) {
+                willCreators[i] = willCreators[willCreators.length - 1];
+                willCreators.pop();
+                break;
+            }
         }
 
-        _addToWillOwners(msg.sender);
-        emit MilestoneWillCreated(msg.sender, willAmount);
+        delete wills[creator];
+        emit Claimed(recipient, amount, creator);
     }
 
-    function claimNormalWill(address _owner) external {
-        require(hasNormalWill[_owner], "No normal will");
-        Will storage will = normalWills[_owner];
+    function changeRecipient(address payable newRecipient) external onlyWillOwner willExists(msg.sender) willNotExpired(msg.sender) {
+        require(newRecipient != address(0), "New recipient cannot be zero address");
+        require(msg.sender != newRecipient, "Owner cannot be the recipient");
+
+        address oldRecipient = wills[msg.sender].recipient;
+        wills[msg.sender].recipient = newRecipient;
+        wills[msg.sender].lastVisited = block.timestamp; // This acts as an automatic ping
+
+        // Record activity for will owner
+        _recordActivity(
+            msg.sender,
+            "RECIPIENT_CHANGED",
+            0,
+            newRecipient,
+            string(abi.encodePacked("Changed recipient from ", _addressToString(oldRecipient), " to ", _addressToString(newRecipient)))
+        );
+
+        // Record activity for old recipient (they were removed)
+        _recordActivity(
+            oldRecipient,
+            "BENEFICIARY_REMOVED",
+            0,
+            msg.sender,
+            string(abi.encodePacked("Removed as beneficiary from will owned by ", _addressToString(msg.sender)))
+        );
+
+        // Record activity for new recipient (they were added)
+        _recordActivity(
+            newRecipient,
+            "BENEFICIARY_ADDED",
+            0,
+            msg.sender,
+            string(abi.encodePacked("Added as beneficiary to will owned by ", _addressToString(msg.sender)))
+        );
+
+        emit Ping(msg.sender, block.timestamp);
+        emit RecipientChanged(msg.sender, oldRecipient, newRecipient);
+    }
+
+    function deposit(address payable newRecipient) external payable onlyWillOwner willExists(msg.sender) willNotExpired(msg.sender) {
+        require(msg.value > 0, "Deposit must be greater than 0");
+        require(newRecipient != address(0), "New recipient cannot be zero address");
+        require(msg.sender != newRecipient, "Owner cannot be the recipient");
+
+        address oldRecipient = wills[msg.sender].recipient;
+        wills[msg.sender].recipient = newRecipient;
+        wills[msg.sender].lastVisited = block.timestamp; // This acts as an automatic ping
+        wills[msg.sender].totalDeposited += msg.value;
+        wills[msg.sender].depositCount++;
+
+        // Record deposit activity
+        _recordActivity(
+            msg.sender,
+            "DEPOSIT",
+            msg.value,
+            newRecipient,
+            string(abi.encodePacked("Deposited ", _uint2str(msg.value), " wei and updated recipient"))
+        );
+
+        // If recipient changed, record the change
+        if (oldRecipient != newRecipient) {
+            _recordActivity(
+                oldRecipient,
+                "BENEFICIARY_REMOVED",
+                0,
+                msg.sender,
+                string(abi.encodePacked("Removed as beneficiary during deposit by ", _addressToString(msg.sender)))
+            );
+
+            _recordActivity(
+                newRecipient,
+                "BENEFICIARY_ADDED",
+                msg.value,
+                msg.sender,
+                string(abi.encodePacked("Added as beneficiary with deposit of ", _uint2str(msg.value), " wei"))
+            );
+        }
+
+        emit Ping(msg.sender, block.timestamp);
+        emit DepositMade(msg.sender, msg.value, newRecipient);
+    }
+
+    // New function to check if a will has expired
+    function isWillExpired(address creator) external view returns (bool) {
+        if (!wills[creator].exists) {
+            return false;
+        }
+        return block.timestamp > wills[creator].lastVisited + wills[creator].tenYears;
+    }
+
+    // New function to get time until expiration (or 0 if expired)
+    function getTimeUntilExpiration(address creator) external view returns (uint256) {
+        if (!wills[creator].exists) {
+            return 0;
+        }
         
-        require(msg.sender == will.beneficiary, "Not beneficiary");
-        require(block.timestamp >= will.lastPingTime + will.claimWaitTime, "Too early");
-        require(!will.isClaimed, "Already claimed");
-
-        will.isClaimed = true;
-        hasNormalWill[_owner] = false;
-        payable(msg.sender).transfer(will.amount);
-
-        _checkRemoveFromWillOwners(_owner);
-        emit WillClaimed(msg.sender, will.amount);
-    }
-
-    function claimMilestoneWill(address _owner, uint256 willIndex, uint256 releaseIndex) external {
-        require(willIndex < milestoneWills[_owner].length, "Invalid will index");
-        MilestoneWill storage will = milestoneWills[_owner][willIndex];
-        require(releaseIndex < will.releases.length, "Invalid release index");
-        MilestoneRelease storage release = will.releases[releaseIndex];
-
-        require(msg.sender == release.beneficiary, "Not beneficiary");
-        require(!release.isClaimed, "Already claimed");
-        require(block.timestamp >= release.releaseTime, "Too early");
-
-        uint256 claimableAmount = (will.totalAmount * release.releasePercentage) / 100;
-        require(will.claimedAmount + claimableAmount <= will.totalAmount, "Overclaim");
-
-        release.isClaimed = true;
-        will.claimedAmount += claimableAmount;
-        payable(msg.sender).transfer(claimableAmount);
-
-        if (will.claimedAmount == will.totalAmount) {
-            will.isFullyClaimed = true;
+        uint256 expirationTime = wills[creator].lastVisited + wills[creator].tenYears;
+        if (block.timestamp >= expirationTime) {
+            return 0;
         }
-
-        emit MilestoneClaimed(msg.sender, claimableAmount);
+        
+        return expirationTime - block.timestamp;
     }
 
-     function getNormalWillAsBeneficiary(address _beneficiary) external view returns (address[] memory owners, uint256[] memory amounts) {
-    uint256 count = 0;
-
-    // First, count how many wills the beneficiary is a part of
-    for (uint256 i = 0; i < willOwners.length; i++) {
-        address user = willOwners[i];
-        if (hasNormalWill[user] && normalWills[user].beneficiary == _beneficiary && !normalWills[user].isClaimed) {
-            count++;
-        }
-    }
-
-    // Create arrays to store results
-    owners = new address[](count);
-    amounts = new uint256[](count);
-    
-    uint256 index = 0;
-
-    // Populate the arrays
-    for (uint256 i = 0; i < willOwners.length; i++) {
-        address user = willOwners[i];
-        if (hasNormalWill[user] && normalWills[user].beneficiary == _beneficiary && !normalWills[user].isClaimed) {
-            owners[index] = user;
-            amounts[index] = normalWills[user].amount;
-            index++;
-        }
-    }
-
-    return (owners, amounts);
-}
-
-
-    function withdrawNormalWill(uint256 amount) external onlyNormalWillOwner {
-        Will storage will = normalWills[msg.sender];
-        require(block.timestamp >= will.creationTime + 365 days, "Can only withdraw after 1 year");
-        require(!will.isClaimed, "Will already claimed");
-
-        uint256 withdrawableAmount = amount > will.amount ? will.amount : amount;
-        will.amount -= withdrawableAmount;
-        payable(msg.sender).transfer(withdrawableAmount);
-
-        emit WillWithdrawn(msg.sender, withdrawableAmount);
-    }
-
-    function ping() external onlyNormalWillOwner {
-        normalWills[msg.sender].lastPingTime = block.timestamp;
-        emit Ping(msg.sender);
-    }
-
-    function updateRecipient(address newRecipient) external onlyNormalWillOwner {
-        require(newRecipient != address(0), "Invalid address");
-        require(msg.sender != newRecipient, "Cannot be owner");
-        normalWills[msg.sender].beneficiary = newRecipient;
-        emit RecipientUpdated(msg.sender, newRecipient);
-    }
-
-    function deposit() external payable onlyNormalWillOwner {
-        require(msg.value > 0, "Invalid amount");
-        normalWills[msg.sender].amount += msg.value;
-        emit DepositMade(msg.sender, msg.value);
-    }
-
-    function _addToWillOwners(address user) private {
-        if (!isInWillOwners[user]) {
-            isInWillOwners[user] = true;
-            willOwners.push(user);
-        }
-    }
-
-    function _checkRemoveFromWillOwners(address user) private {
-        if (!hasNormalWill[user] && milestoneWills[user].length == 0) {
-            isInWillOwners[user] = false;
-        }
-    }
-
-     function getMilestoneWillsAsBeneficiary(address _beneficiary)
-        external
-        view
-        returns (address[] memory owners, uint256[] memory willIndexes, uint256[] memory releaseIndexes, uint256[] memory releaseAmounts)
+    // Get user's recent activity (paginated)
+    function getUserActivity(address user, uint256 offset, uint256 limit) 
+        external 
+        view 
+        returns (
+            Activity[] memory activities,
+            uint256 totalActivities,
+            uint256 lastActivityTime,
+            bool hasMore
+        ) 
     {
+        UserActivity storage userActivity = userActivities[user];
+        
+        if (!userActivity.hasActivity || offset >= userActivity.totalActivities) {
+            return (new Activity[](0), 0, 0, false);
+        }
+
+        uint256 end = offset + limit;
+        if (end > userActivity.totalActivities) {
+            end = userActivity.totalActivities;
+        }
+
+        uint256 length = end - offset;
+        Activity[] memory result = new Activity[](length);
+
+        // Return activities in reverse chronological order (newest first)
+        for (uint256 i = 0; i < length; i++) {
+            uint256 index = userActivity.totalActivities - 1 - offset - i;
+            result[i] = userActivity.activities[index];
+        }
+
+        return (
+            result,
+            userActivity.totalActivities,
+            userActivity.lastActivityTime,
+            end < userActivity.totalActivities
+        );
+    }
+
+    // Get user's activity summary
+    function getUserActivitySummary(address user) 
+        external 
+        view 
+        returns (
+            uint256 totalActivities,
+            uint256 lastActivityTime,
+            bool hasActivity,
+            string memory lastActivityType
+        ) 
+    {
+        UserActivity storage userActivity = userActivities[user];
+        
+        if (!userActivity.hasActivity || userActivity.totalActivities == 0) {
+            return (0, 0, false, "");
+        }
+
+        Activity storage lastActivity = userActivity.activities[userActivity.totalActivities - 1];
+        
+        return (
+            userActivity.totalActivities,
+            userActivity.lastActivityTime,
+            userActivity.hasActivity,
+            lastActivity.activityType
+        );
+    }
+
+    // Get activities by type for a user
+    function getUserActivitiesByType(address user, string memory activityType) 
+        external 
+        view 
+        returns (Activity[] memory) 
+    {
+        UserActivity storage userActivity = userActivities[user];
+        
+        if (!userActivity.hasActivity) {
+            return new Activity[](0);
+        }
+
+        // First pass: count matching activities
         uint256 count = 0;
-        for (uint256 i = 0; i < willOwners.length; i++) {
-            address user = willOwners[i];
-            for (uint256 j = 0; j < milestoneWills[user].length; j++) {
-                MilestoneWill storage will = milestoneWills[user][j];
-                for (uint256 k = 0; k < will.releases.length; k++) {
-                    if (will.releases[k].beneficiary == _beneficiary && !will.releases[k].isClaimed) {
-                        count++;
-                    }
-                }
+        for (uint256 i = 0; i < userActivity.totalActivities; i++) {
+            if (keccak256(bytes(userActivity.activities[i].activityType)) == keccak256(bytes(activityType))) {
+                count++;
             }
         }
 
-        owners = new address[](count);
-        willIndexes = new uint256[](count);
-        releaseIndexes = new uint256[](count);
-        releaseAmounts = new uint256[](count);
-
-        uint256 index = 0;
-        for (uint256 i = 0; i < willOwners.length; i++) {
-            address user = willOwners[i];
-            for (uint256 j = 0; j < milestoneWills[user].length; j++) {
-                MilestoneWill storage will = milestoneWills[user][j];
-                for (uint256 k = 0; k < will.releases.length; k++) {
-                    if (will.releases[k].beneficiary == _beneficiary && !will.releases[k].isClaimed) {
-                        owners[index] = user;
-                        willIndexes[index] = j;
-                        releaseIndexes[index] = k;
-                        releaseAmounts[index] = (will.totalAmount * will.releases[k].releasePercentage) / 100;
-                        index++;
-                    }
-                }
+        // Second pass: collect matching activities
+        Activity[] memory result = new Activity[](count);
+        uint256 resultIndex = 0;
+        
+        for (uint256 i = 0; i < userActivity.totalActivities; i++) {
+            if (keccak256(bytes(userActivity.activities[i].activityType)) == keccak256(bytes(activityType))) {
+                result[resultIndex] = userActivity.activities[i];
+                resultIndex++;
             }
         }
+
+        return result;
+    }
+
+    // Existing functions with minor updates
+    function hasCreatedWill(address _address) public view returns (bool) {
+        return wills[_address].exists;
+    }
+
+    function getAllWills() public view returns (address[] memory) {
+        return willCreators;
+    }
+
+    function getTotalWills() public view returns (uint256) {
+        return willCreators.length;
+    }
+
+    function getWillDetails(address creator) public view returns (
+        uint256 startTime,
+        uint256 lastVisited,
+        uint256 tenYears,
+        address recipient,
+        string memory description,
+        bool exists,
+        uint256 totalDeposited,
+        uint256 depositCount
+    ) {
+        Will storage will = wills[creator];
+        return (
+            will.startTime,
+            will.lastVisited,
+            will.tenYears,
+            will.recipient,
+            will.description,
+            will.exists,
+            will.totalDeposited,
+            will.depositCount
+        );
+    }
+
+    function getBalance() external view returns (uint256) {
+        return address(this).balance;
+    }
+
+    // Helper functions for string conversion
+    function _uint2str(uint256 _i) internal pure returns (string memory) {
+        if (_i == 0) {
+            return "0";
+        }
+        uint256 j = _i;
+        uint256 len;
+        while (j != 0) {
+            len++;
+            j /= 10;
+        }
+        bytes memory bstr = new bytes(len);
+        uint256 k = len;
+        while (_i != 0) {
+            k = k - 1;
+            uint8 temp = (48 + uint8(_i - _i / 10 * 10));
+            bytes1 b1 = bytes1(temp);
+            bstr[k] = b1;
+            _i /= 10;
+        }
+        return string(bstr);
+    }
+
+    function _addressToString(address _addr) internal pure returns (string memory) {
+        bytes32 value = bytes32(uint256(uint160(_addr)));
+        bytes memory alphabet = "0123456789abcdef";
+        bytes memory str = new bytes(42);
+        str[0] = '0';
+        str[1] = 'x';
+        for (uint256 i = 0; i < 20; i++) {
+            str[2 + i * 2] = alphabet[uint8(value[i + 12] >> 4)];
+            str[3 + i * 2] = alphabet[uint8(value[i + 12] & 0x0f)];
+        }
+        return string(str);
     }
 }

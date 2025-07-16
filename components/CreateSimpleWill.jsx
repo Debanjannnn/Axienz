@@ -29,6 +29,7 @@ import {
   Wallet,
   DollarSign,
   RefreshCw,
+  Settings,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -60,6 +61,9 @@ export default function CreateSimpleWill() {
     assets: "",
     amount: "",
     claimWaitTime: "31536000", // 1 year in seconds
+    customTime: "",
+    timeUnit: "days",
+    useCustomTime: false,
   });
 
   const [validationError, setValidationError] = useState("");
@@ -72,6 +76,7 @@ export default function CreateSimpleWill() {
   const [bnbPrice, setBnbPrice] = useState(null);
   const [amountUSD, setAmountUSD] = useState(0);
   const [loadingPrice, setLoadingPrice] = useState(false);
+  const [contractError, setContractError] = useState("");
 
   const [confirmationChecks, setConfirmationChecks] = useState({
     termsAccepted: false,
@@ -80,6 +85,48 @@ export default function CreateSimpleWill() {
     confirmBeneficiary: false,
     createBackup: false,
   });
+
+  // Convert custom time to seconds
+  const convertCustomTimeToSeconds = (time, unit) => {
+    const timeNum = parseInt(time);
+    if (isNaN(timeNum) || timeNum <= 0) return 0;
+    
+    const multipliers = {
+      seconds: 1,
+      hours: 3600,
+      days: 86400,
+      weeks: 604800,
+      months: 2629746, // Average month
+      years: 31536000,
+    };
+    
+    return timeNum * multipliers[unit];
+  };
+
+  // Get display text for wait time
+  const getWaitTimeDisplay = () => {
+    if (formData.useCustomTime) {
+      return `${formData.customTime} ${formData.timeUnit}`;
+    }
+    
+    const timeMap = {
+      "2592000": "1 month",
+      "7776000": "3 months", 
+      "15552000": "6 months",
+      "31536000": "1 year",
+      "63072000": "2 years",
+    };
+    
+    return timeMap[formData.claimWaitTime] || "1 year";
+  };
+
+  // Get actual wait time in seconds
+  const getActualWaitTime = () => {
+    if (formData.useCustomTime) {
+      return convertCustomTimeToSeconds(formData.customTime, formData.timeUnit);
+    }
+    return parseInt(formData.claimWaitTime);
+  };
 
   // Fetch BNB price
   const fetchBNBPrice = useCallback(async () => {
@@ -109,11 +156,13 @@ export default function CreateSimpleWill() {
     }
   }, [formData.amount, bnbPrice]);
 
-  // Check if user already has a will
+  // Check if user already has a will with better error handling
   const checkWillStatus = useCallback(async () => {
     if (account && isConnected) {
       try {
         setCheckingWill(true);
+        setContractError("");
+        
         const willExists = await hasCreatedWill();
         setHasWill(willExists);
 
@@ -123,6 +172,9 @@ export default function CreateSimpleWill() {
         }
       } catch (error) {
         console.error("Error checking will status:", error);
+        setContractError(
+          "Unable to check will status. Please ensure you're connected to BNB Testnet and try again."
+        );
       } finally {
         setCheckingWill(false);
       }
@@ -187,6 +239,25 @@ export default function CreateSimpleWill() {
       return false;
     }
 
+    // Validate custom time if selected
+    if (formData.useCustomTime) {
+      if (!formData.customTime || parseInt(formData.customTime) <= 0) {
+        setValidationError("Please enter a valid custom wait time");
+        return false;
+      }
+      
+      const seconds = convertCustomTimeToSeconds(formData.customTime, formData.timeUnit);
+      if (seconds < 60) { // Minimum 60 seconds
+        setValidationError("Wait time must be at least 60 seconds");
+        return false;
+      }
+      
+      if (seconds > 157680000) { // Maximum 5 years
+        setValidationError("Wait time cannot exceed 5 years");
+        return false;
+      }
+    }
+
     return true;
   };
 
@@ -211,11 +282,13 @@ export default function CreateSimpleWill() {
       setWaitingForSignature(true);
       setValidationError("");
 
+      const waitTime = getActualWaitTime();
+      
       const success = await createNormalWill(
         formData.beneficiary,
         formData.assets,
         formData.amount,
-        parseInt(formData.claimWaitTime),
+        waitTime,
         (hash) => {
           setTransactionHash(hash);
           setWaitingForSignature(false);
@@ -287,6 +360,14 @@ export default function CreateSimpleWill() {
             <div className="text-center">
               <Loader2 className="w-8 h-8 animate-spin text-amber-400 mx-auto mb-4" />
               <p className="text-white">Checking your will status...</p>
+              {contractError && (
+                <Alert className="mt-4 bg-red-900/20 border-red-500/50">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription className="text-sm">
+                    {contractError}
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -314,6 +395,14 @@ export default function CreateSimpleWill() {
             Secure your digital assets with our blockchain-based will system
           </p>
         </div>
+
+        {/* Contract Error Alert */}
+        {contractError && (
+          <Alert className="mb-6 bg-red-900/20 border-red-500/50">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{contractError}</AlertDescription>
+          </Alert>
+        )}
 
         {/* Main Form */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -419,22 +508,72 @@ export default function CreateSimpleWill() {
                 <Label htmlFor="waitTime" className="text-white">
                   Claim Wait Time
                 </Label>
-                <select
-                  id="waitTime"
-                  value={formData.claimWaitTime}
-                  onChange={(e) =>
-                    handleInputChange("claimWaitTime", e.target.value)
-                  }
-                  className="w-full bg-white/5 border border-white/20 text-white rounded-md px-3 py-2"
-                >
-                  <option value="2592000">1 Month</option>
-                  <option value="7776000">3 Months</option>
-                  <option value="15552000">6 Months</option>
-                  <option value="31536000">1 Year (Recommended)</option>
-                  <option value="63072000">2 Years</option>
-                </select>
+                
+                {/* Toggle for custom time */}
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="useCustomTime"
+                    checked={formData.useCustomTime}
+                    onCheckedChange={(checked) =>
+                      handleInputChange("useCustomTime", checked)
+                    }
+                  />
+                  <Label htmlFor="useCustomTime" className="text-sm text-gray-400">
+                    Use custom time
+                  </Label>
+                </div>
+
+                {!formData.useCustomTime ? (
+                  <select
+                    id="waitTime"
+                    value={formData.claimWaitTime}
+                    onChange={(e) =>
+                      handleInputChange("claimWaitTime", e.target.value)
+                    }
+                    className="w-full bg-white/5 border border-white/20 text-white rounded-md px-3 py-2"
+                  >
+                    <option value="2592000">1 Month</option>
+                    <option value="7776000">3 Months</option>
+                    <option value="15552000">6 Months</option>
+                    <option value="31536000">1 Year (Recommended)</option>
+                    <option value="63072000">2 Years</option>
+                  </select>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      min="1"
+                      placeholder="Enter time"
+                      value={formData.customTime}
+                      onChange={(e) =>
+                        handleInputChange("customTime", e.target.value)
+                      }
+                      className="bg-white/5 border-white/20 text-white placeholder:text-gray-500"
+                    />
+                    <select
+                      value={formData.timeUnit}
+                      onChange={(e) =>
+                        handleInputChange("timeUnit", e.target.value)
+                      }
+                      className="bg-white/5 border border-white/20 text-white rounded-md px-3 py-2"
+                    >
+                      <option value="seconds">Seconds</option>
+                      <option value="hours">Hours</option>
+                      <option value="days">Days</option>
+                      <option value="weeks">Weeks</option>
+                      <option value="months">Months</option>
+                      <option value="years">Years</option>
+                    </select>
+                  </div>
+                )}
+                
                 <p className="text-xs text-gray-400">
                   Time before beneficiary can claim after your last activity
+                  {formData.useCustomTime && (
+                    <span className="block mt-1 text-amber-400">
+                      Custom time: {getWaitTimeDisplay()} (min: 60 seconds, max: 5 years)
+                    </span>
+                  )}
                 </p>
               </div>
 
@@ -464,7 +603,8 @@ export default function CreateSimpleWill() {
                       creatingWill ||
                       !formData.beneficiary ||
                       !formData.assets ||
-                      !formData.amount
+                      !formData.amount ||
+                      (formData.useCustomTime && !formData.customTime)
                     }
                     className="w-full bg-amber-500 hover:bg-amber-600 text-black font-bold py-3 transition-colors"
                   >
@@ -511,17 +651,7 @@ export default function CreateSimpleWill() {
                           }
                         />
                         <label className="text-sm">
-                          I understand the beneficiary can claim after{" "}
-                          {formData.claimWaitTime === "31536000"
-                            ? "1 year"
-                            : formData.claimWaitTime === "2592000"
-                              ? "1 month"
-                              : formData.claimWaitTime === "7776000"
-                                ? "3 months"
-                                : formData.claimWaitTime === "15552000"
-                                  ? "6 months"
-                                  : "2 years"}{" "}
-                          of inactivity
+                          I understand the beneficiary can claim after {getWaitTimeDisplay()} of inactivity
                         </label>
                       </div>
 
@@ -576,16 +706,7 @@ export default function CreateSimpleWill() {
                           Beneficiary: {formData.beneficiary.slice(0, 10)}...
                         </p>
                         <p>
-                          Wait Time:{" "}
-                          {formData.claimWaitTime === "31536000"
-                            ? "1 year"
-                            : formData.claimWaitTime === "2592000"
-                              ? "1 month"
-                              : formData.claimWaitTime === "7776000"
-                                ? "3 months"
-                                : formData.claimWaitTime === "15552000"
-                                  ? "6 months"
-                                  : "2 years"}
+                          Wait Time: {getWaitTimeDisplay()}
                         </p>
                       </div>
                     </div>
@@ -661,71 +782,60 @@ export default function CreateSimpleWill() {
               </CardContent>
             </Card>
 
-            {/* How it Works */}
+            {/* How It Works */}
             <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
               <CardHeader>
                 <CardTitle className="text-white flex items-center gap-2">
-                  <Info className="w-5 h-5 text-amber-400" />
+                  <Settings className="w-5 h-5 text-amber-400" />
                   How It Works
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3 text-sm text-gray-300">
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 bg-amber-500 text-black rounded-full flex items-center justify-center text-xs font-bold mt-0.5">
-                      1
-                    </div>
-                    <p>
-                      Lock your BNB in a secure smart contract with your chosen
-                      beneficiary
-                    </p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 bg-amber-500 text-black rounded-full flex items-center justify-center text-xs font-bold mt-0.5">
-                      2
-                    </div>
-                    <p>
-                      Stay active by pinging the contract or making transactions
-                    </p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 bg-amber-500 text-black rounded-full flex items-center justify-center text-xs font-bold mt-0.5">
-                      3
-                    </div>
-                    <p>
-                      If inactive for the set period, your beneficiary can claim
-                      the assets
-                    </p>
-                  </div>
+              <CardContent className="space-y-4 text-sm text-gray-300">
+                <div className="flex items-start gap-3">
+                  <div className="w-4 h-4 mt-1 bg-amber-400 rounded-full flex-shrink-0" />
+                  <p>
+                    <span className="font-bold text-white">Fill in the details:</span> Provide the beneficiary's address, asset description, and the amount of BNB to lock.
+                  </p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-4 h-4 mt-1 bg-amber-400 rounded-full flex-shrink-0" />
+                  <p>
+                    <span className="font-bold text-white">Confirm & Create:</span> Review the details, confirm the conditions, and sign the transaction with your wallet. This deploys the smart contract will.
+                  </p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-4 h-4 mt-1 bg-amber-400 rounded-full flex-shrink-0" />
+                  <p>
+                    <span className="font-bold text-white">Stay Active:</span> The inactivity timer resets every time you make an outgoing transaction from your wallet.
+                  </p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-4 h-4 mt-1 bg-amber-400 rounded-full flex-shrink-0" />
+                  <p>
+                    <span className="font-bold text-white">Beneficiary Claim:</span> If your wallet is inactive for the specified duration, your beneficiary can claim the locked assets.
+                  </p>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Security Features */}
+            {/* Inactivity Explained */}
             <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
               <CardHeader>
                 <CardTitle className="text-white flex items-center gap-2">
                   <Clock className="w-5 h-5 text-amber-400" />
-                  Security Features
+                  Understanding Inactivity
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm text-gray-300">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  <span>Immutable once created</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  <span>Blockchain verified transactions</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  <span>Time-locked security</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  <span>1-year withdrawal cooldown</span>
-                </div>
+              <CardContent className="space-y-2">
+                <p className="text-sm text-gray-300">
+                  Your "last activity" is defined by the timestamp of the last outgoing transaction from your wallet.
+                </p>
+                <Alert className="bg-blue-900/20 border-blue-500/50 mt-2">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription className="text-sm">
+                    Any transaction you send (like transferring crypto or interacting with a dApp) resets the inactivity timer. This ensures the will is only claimable after a genuine period of inactivity.
+                  </AlertDescription>
+                </Alert>
               </CardContent>
             </Card>
           </div>

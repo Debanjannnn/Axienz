@@ -242,21 +242,65 @@ export function SmartWillProvider({ children }) {
   }
 
   // Check if address has created a will - matches ABI: hasNormalWill(address)
-  async function hasCreatedWill(address) {
+ async function hasCreatedWill(address) {
     try {
       const targetAddress = address || account;
       if (!targetAddress) return false;
 
+      // Add additional checks before making the contract call
+      if (!window.ethereum) {
+        console.warn("MetaMask not available");
+        return false;
+      }
+
       const provider = new ethers.BrowserProvider(window.ethereum);
+      
+      // Check if we're on the correct network
+      const network = await provider.getNetwork();
+      if (network.chainId !== BigInt(parseInt(BNB_CHAIN_CONFIG.chainId, 16))) {
+        console.warn("Wrong network, switching...");
+        await switchToBNBChain();
+      }
+
       const contract = new ethers.Contract(
         CONTRACT_ADDRESS,
         CONTRACT_ABI,
         provider,
       );
 
-      return await contract.hasNormalWill(targetAddress);
+      // Add timeout and retry logic
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Contract call timeout')), 10000)
+      );
+
+      const contractPromise = contract.hasNormalWill(targetAddress);
+      
+      const result = await Promise.race([contractPromise, timeoutPromise]);
+      return result;
+      
     } catch (error) {
       console.error("Error checking will existence:", error);
+      
+      // Handle specific error types
+      if (error.code === 'CALL_EXCEPTION') {
+        console.error("Contract call failed - possible reasons:");
+        console.error("1. Contract not deployed at address:", CONTRACT_ADDRESS);
+        console.error("2. Wrong network or RPC issues");
+        console.error("3. Contract method signature mismatch");
+        
+        // Try to verify contract exists
+        try {
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const code = await provider.getCode(CONTRACT_ADDRESS);
+          if (code === '0x') {
+            console.error("Contract not found at address:", CONTRACT_ADDRESS);
+          }
+        } catch (codeError) {
+          console.error("Error checking contract code:", codeError);
+        }
+      }
+      
+      // Return false instead of throwing to prevent app crash
       return false;
     }
   }
