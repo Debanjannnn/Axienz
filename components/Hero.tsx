@@ -144,7 +144,7 @@ export default function HeroSection() {
 
       {/* Social Media Icons */}
       <motion.div
-        className="flex items-center space-x-8 pt-20"
+        className="flex items-center space-x-8"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, delay: 2.6 }}

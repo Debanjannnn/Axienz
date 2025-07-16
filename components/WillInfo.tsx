@@ -1,187 +1,238 @@
-// "use client"
-
-// import { motion } from "framer-motion"
-// import { Card } from "@/components/ui/card"
-// import { CheckCircle } from "lucide-react"
-
-// const steps = [
-//   {
-//     title: "Create Your Will",
-//     description: "Set up your digital will on BNB Chain, specifying beneficiaries and asset distribution.",
-//   },
-//   {
-//     title: "Define Conditions",
-//     description: "Establish time-based or event-triggered conditions for asset release using smart contracts.",
-//   },
-//   {
-//     title: "Secure with BNB",
-//     description: "Your will is securely stored and executed on the fast and eco-friendly BNB Chain.",
-//   },
-//   {
-//     title: "Easy Management",
-//     description: "Update your will anytime with our user-friendly interface, reflecting life changes instantly.",
-//   },
-// ]
-
-// export default function WillInfo() {
-//   return (
-//     <section className="py-20 relative">
-//       <div className="container mx-auto px-4">
-//         <div className="grid md:grid-cols-2 gap-12 items-center">
-//           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
-//             <h2 className="text-4xl font-display mb-6">
-//               Creating Your Will
-//               <br />
-//               on Open  Blockchain
-//             </h2>
-//             <p className="text-gray-400 mb-8">
-//               Secure your legacy with ease using our BNB-powered digital will platform. Our smart contract technology
-//               ensures your wishes are executed exactly as you intend, with the speed and efficiency of BNB Chain.
-//             </p>
-//             <button className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-3 rounded-full text-sm transition-colors">
-//               Start Your Will
-//             </button>
-//           </motion.div>
-//           <motion.div
-//             initial={{ opacity: 0, x: 20 }}
-//             animate={{ opacity: 1, x: 0 }}
-//             transition={{ duration: 0.5, delay: 0.2 }}
-//           >
-//             <Card className="bg-black/50 border-gray-800">
-//               <div className="p-6">
-//                 <ul className="space-y-4">
-//                   {steps.map((step, index) => (
-//                     <li key={index} className="flex items-start">
-//                       <CheckCircle className="w-6 h-6 text-emerald-400 mr-2 flex-shrink-0" />
-//                       <div>
-//                         <h3 className="font-medium mb-1">{step.title}</h3>
-//                         <p className="text-sm text-gray-400">{step.description}</p>
-//                       </div>
-//                     </li>
-//                   ))}
-//                 </ul>
-//               </div>
-//             </Card>
-//           </motion.div>
-//         </div>
-//       </div>
-//     </section>
-//   )
-// }
-
 "use client"
 
-import { motion } from "framer-motion"
+import { FileText, Shield, Edit } from "lucide-react"
+import { motion, type Variants } from "framer-motion"
+import { Poppins } from "next/font/google"
+import { cn } from "@/lib/utils"
+// import { AuroraText } from "@/components/magicui/aurora-text"
 
+const poppins = Poppins({
+  weight: ["400", "500", "600", "700"],
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-poppins",
+})
 
-import {
-  AnimatedSpan,
-  Terminal,
-  TypingAnimation,
-} from "@/components/magicui/terminal";
-import { SparklesText } from "./magicui/sparkles-text";
+export default function HowItWorks() {
+  // Animation variants
+  const cardVariants: Variants = {
+    initial: {
+      opacity: 0,
+      y: 20,
+    },
+    animate: (index: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: {
+        delay: 0.2 * index,
+        duration: 0.6,
+        ease: "easeOut",
+      },
+    }),
+    hover: {
+      y: -8,
+      transition: {
+        duration: 0.3,
+        ease: "easeInOut",
+      },
+    },
+  }
 
-const steps = [
-  {
-    title: "Create Your Will",
-    description:
-      "Set up your digital will on Open Campus blockchain, specifying beneficiaries and asset distribution.",
-  },
-  {
-    title: "Define Conditions",
-    description:
-      "Establish time-based or event-triggered conditions for asset release using smart contracts.",
-  },
-  {
-    title: "Secure with BNB",
-    description:
-      "Your will is securely stored and executed on the fast and eco-friendly Open Campus blockchain.",
-  },
-  {
-    title: "Easy Management",
-    description:
-      "Update your will anytime with our user-friendly interface, reflecting life changes instantly.",
-  },
-];
+  const iconVariants: Variants = {
+    initial: {
+      scale: 0.8,
+      opacity: 0.5,
+    },
+    animate: {
+      scale: 1,
+      opacity: 1,
+      transition: {
+        duration: 0.5,
+        ease: "easeOut",
+      },
+    },
+    hover: {
+      scale: 1.15,
+      rotate: [0, -8, 8, -8, 0],
+      transition: {
+        duration: 0.6,
+        ease: "easeInOut",
+      },
+    },
+  }
 
-export default function WillInfo() {
+  const steps = [
+    {
+      icon: FileText,
+      step: "Step 1",
+      title: "Set Up & Fund Your Will",
+      description:
+        "Initialize your will by specifying a recipient and the amount to be inherited. Funds are securely locked in the contract on the Aptos blockchain.",
+      features: [
+        "Specify recipient address",
+        "Choose inheritance amount",
+        "Funds locked in contract",
+        "Immutable blockchain record",
+        "Global registry for recipients",
+        "Aptos network security",
+      ],
+    },
+    {
+      icon: Shield,
+      step: "Step 2",
+      title: "Stay Active with Pings",
+      description:
+        "Periodically 'ping' the contract to prove you're active. If you don't ping within the set timeout, your will becomes claimable by the recipient.",
+      features: [
+        "Ping to show activity",
+        "Customizable timeout period",
+        "Automated monitoring",
+        "No third-party required",
+        "Transparent status tracking",
+        "Owner-controlled updates",
+      ],
+    },
+    {
+      icon: Edit,
+      step: "Step 3",
+      title: "Claim by Recipient",
+      description:
+        "If the timeout passes without a ping, the recipient can claim the locked assets. The process is secure, automated, and transparent.",
+      features: [
+        "Automatic eligibility check",
+        "Secure asset transfer",
+        "No manual intervention",
+        "View claimable wills",
+        "Instant execution",
+        "Full auditability",
+      ],
+    },
+  ]
+
   return (
-    <section className="py-20 relative bg-[#0d0f12]">
-      <div className="container mx-auto px-3">
-        <div className="grid md:grid-cols-2 gap-72 ">
-          {/* Left Column */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
-            className="text-center md:text-left"
+    <div className={cn("relative text-white py-20 px-4 md:px-6 z-10 bg-[#0d0f12]", poppins.className)}>
+      {/* Background gradient overlay */}
+      <div className="absolute inset-0 bg-[#0e090200] pointer-events-none"></div>
+
+      {/* SVG Gradients for icons */}
+      <svg width="0" height="0" className="absolute">
+        <linearGradient id="icon-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="white" />
+          <stop offset="100%" stopColor="#C0C0C0" />
+        </linearGradient>
+        <linearGradient id="step-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#C0C0C0" />
+          <stop offset="100%" stopColor="white" />
+        </linearGradient>
+      </svg>
+
+      <div className="max-w-7xl mx-auto relative z-10">
+        {/* Header */}
+        <motion.div
+          className="text-center mb-16"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7 }}
+        >
+          <motion.h1
+            className={cn("text-3xl md:text-4xl lg:text-5xl font-thin text-center mb-4 text-white", poppins.className)}
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7 }}
           >
-            <h2 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6 bg-clip-text  bg-gradient-to-r from-white via-gray-200 to-gray-400">
-              Creating Your <br /> Will  on <br /><SparklesText text="BNB Chain " className="text-gray-300" /> 
-            </h2>
-            <p className="text-gray-400 mb-8">
-              Secure your legacy with ease using our BNB-powered digital will platform.
-              Secure your legacy with ease using our BNB-powered digital will platform.
-              Our smart contract technology ensures your wishes are executed exactly as you
-              intend, with the speed and efficiency of BNB Chain.
-            </p>
-          </motion.div>
+            <span className="text-5xl text-transparent bg-clip-text bg-gradient-to-r from-[#2e3192] via-white to-[#1b1e4b]">How It Works</span>
+          </motion.h1>
+          <motion.p
+            className="text-white/70 text-2xl font-light"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3, duration: 0.7 }}
+          >
+            Create your digital legacy in three simple steps on the BNB Chain.
+          </motion.p>
+        </motion.div>
 
-          {/* Right Column - Terminal */}
-          <div className="w-full">
-            <Terminal className="w-full text-left scroll-my-0 font-robotoMono">
-              <div className="space-y-2 overflow-hidden">
-                <TypingAnimation className="block">&gt; Create Your Will</TypingAnimation>
+        {/* Steps Grid - Now 3 columns, centered */}
+        <div className="grid md:grid-cols-3 gap-8 justify-center items-center text-center">
+          {steps.map((step, index) => {
+            const IconComponent = step.icon
+            return (
+              <motion.div
+                key={index}
+                className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 flex flex-col items-center relative group overflow-hidden shadow-xl hover:shadow-[0_0_30px_rgba(192,192,192,0.2)] h-full text-center"
+                initial="initial"
+                animate="animate"
+                whileHover="hover"
+                variants={cardVariants}
+                custom={index}
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-[#C0C0C0]/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-3xl"></div>
 
-                <AnimatedSpan delay={1500} className="block text-green-500">
-                  <span>
-                    ✔ Set up your digital will on BNB Chain, specifying beneficiaries and asset distribution.
+                {/* Step indicator */}
+                <div className="flex flex-col items-center justify-between mb-6 w-full">
+                  <motion.div
+                    className="w-16 h-16 bg-black/30 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-white/10 relative overflow-hidden mb-2"
+                    variants={iconVariants}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-[#C0C0C0]/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    <IconComponent
+                      className="w-8 h-8 text-[#C0C0C0] group-hover:text-white transition-colors duration-300"
+                      strokeWidth={1.5}
+                    />
+                  </motion.div>
+                  <span className="text-sm bg-gradient-to-r from-[#C0C0C0] to-white bg-clip-text text-transparent font-medium">
+                    {step.step}
                   </span>
-                </AnimatedSpan>
+                </div>
 
-                <AnimatedSpan delay={2000} className="block text-green-500">
-                  <span>✔ Define Conditions</span>
-                </AnimatedSpan>
+                {/* Content */}
+                <h3
+                  className={cn(
+                    "text-2xl font-thin mb-4 text-white group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-t group-hover:from-white group-hover:to-[#C0C0C0] transition-colors duration-300 text-center",
+                    poppins.className,
+                  )}
+                >
+                  {step.title}
+                </h3>
+                <p className="text-white/70 leading-relaxed mb-6 font-light text-sm text-center">{step.description}</p>
 
-                <AnimatedSpan delay={2500} className="block text-green-500">
-                  <span>
-                    ✔ Establish time-based or event-triggered conditions for asset release using smart contracts.
-                  </span>
-                </AnimatedSpan>
+                {/* Features */}
+                <ul className="space-y-3 mb-6 flex-grow flex flex-col items-center text-center">
+                  {step.features.map((feature, featureIndex) => (
+                    <motion.li
+                      key={featureIndex}
+                      className="flex items-center text-xs text-white/70 justify-center text-center"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.4 + featureIndex * 0.1, duration: 0.5 }}
+                    >
+                      <div className="w-1.5 h-1.5 bg-[#C0C0C0]/70 rounded-full mr-3 flex-shrink-0"></div>
+                      <span className="font-light">{feature}</span>
+                    </motion.li>
+                  ))}
+                </ul>
 
-                <AnimatedSpan delay={3000} className="block text-green-500">
-                  <span>✔ Secure with Blockchain</span>
-                </AnimatedSpan>
+                {/* Action indicator */}
+                <div className="mt-auto pt-4">
+                  <motion.div
+                    className="flex items-center justify-center"
+                    initial={{ opacity: 0.5 }}
+                    whileHover={{ opacity: 1 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <div className="w-12 h-0.5 bg-gradient-to-r from-[#C0C0C0] to-transparent rounded-full"></div>
+                  </motion.div>
+                </div>
+              </motion.div>
+            )
+          })}
+        </div>
 
-                <AnimatedSpan delay={3500} className="block text-green-500">
-                  <span>
-                    ✔ Your will is securely stored and executed on the fast and eco-friendly BNB Chain.
-                  </span>
-                </AnimatedSpan>
-
-                <AnimatedSpan delay={4000} className="block text-green-500">
-                  <span>✔ Easy Management.</span>
-                </AnimatedSpan>
-
-                <AnimatedSpan delay={4500} className="block text-green-500">
-                  <span>
-                    ✔ Update your will anytime with our user-friendly interface, reflecting life changes instantly.
-                  </span>
-                </AnimatedSpan>
-
-                <TypingAnimation delay={6500} className="block text-muted-foreground">
-                  Digital will setup completed successfully.
-                </TypingAnimation>
-
-                <TypingAnimation delay={7000} className="block text-muted-foreground">
-                  Check your will
-                </TypingAnimation>
-              </div>
-            </Terminal>
-          </div>
+        {/* Connection lines between steps (visible on lg and larger screens) */}
+        <div className="hidden lg:block absolute top-1/2 left-0 w-full z-0 pointer-events-none">
+          <div className="relative h-0.5 bg-gradient-to-r from-transparent via-[#C0C0C0]/30 to-transparent w-[70%] mx-auto"></div>
         </div>
       </div>
-    </section>
-  );
+    </div>
+  )
 }
-

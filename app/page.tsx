@@ -53,7 +53,7 @@ export default function Home() {
         <FloatingNav navItems={navItems} />
       </div>
       
-      <div className="pt-24">
+      <div>
         <HeroSection />
       </div>
 
