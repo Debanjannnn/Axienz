@@ -18,7 +18,6 @@ export function AnimatedListItem({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    //@ts-ignore
     <motion.div {...animations} layout className="mx-auto w-full">
       {children}
     </motion.div>

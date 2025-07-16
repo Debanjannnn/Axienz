@@ -91,11 +91,15 @@ export function SidebarNav({ className }: SidebarNavProps) {
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="p-6 border-b border-gray-800">
+      <div className="p-6 border-b border-white/10">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center">
-            <span className="text-black font-bold text-lg">W</span>
-          </div>
+          <img
+            src="/icons/legacyonchainfav.png"
+            alt="Axienz"
+            width={40}
+            height={40}
+            className="rounded-full"
+          />
           {!isCollapsed && (
             <motion.div
               variants={itemVariants}
@@ -103,7 +107,7 @@ export function SidebarNav({ className }: SidebarNavProps) {
               className="flex-1"
             >
               <h1 className="text-xl font-bold text-white">Axienz</h1>
-              <p className="text-xs text-gray-400">Secure Your Legacy</p>
+              <p className="text-xs text-amber-400">Secure Your Legacy</p>
             </motion.div>
           )}
         </div>
@@ -111,10 +115,10 @@ export function SidebarNav({ className }: SidebarNavProps) {
 
       {/* Wallet Info */}
       {isConnected && (
-        <div className="p-4 border-b border-gray-800">
+        <div className="p-4 border-b border-white/10">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
-              <Wallet className="w-4 h-4 text-green-500" />
+            <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center border border-amber-500/30">
+              <Wallet className="w-4 h-4 text-amber-400" />
             </div>
             {!isCollapsed && (
               <motion.div
@@ -125,7 +129,7 @@ export function SidebarNav({ className }: SidebarNavProps) {
                 <p className="text-sm font-medium text-white truncate">
                   {formatAddress(account || "")}
                 </p>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-amber-400">
                   {parseFloat(balance).toFixed(4)} BNB
                 </p>
               </motion.div>
@@ -148,8 +152,8 @@ export function SidebarNav({ className }: SidebarNavProps) {
                 className={cn(
                   "flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-colors group relative",
                   isActive
-                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                    : "text-gray-400 hover:text-white hover:bg-gray-800/50",
+                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-lg shadow-amber-500/10"
+                    : "text-gray-300 hover:text-white hover:bg-white/10 hover:border hover:border-white/20",
                 )}
               >
                 <div className="flex-shrink-0">{item.icon}</div>
@@ -185,12 +189,12 @@ export function SidebarNav({ className }: SidebarNavProps) {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-gray-800">
+      <div className="p-4 border-t border-white/10">
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="w-full text-gray-400 hover:text-white hidden lg:flex"
+          className="w-full text-gray-400 hover:text-amber-400 hover:bg-amber-500/10 hidden lg:flex transition-all"
         >
           <ChevronRight
             className={cn(
@@ -211,7 +215,7 @@ export function SidebarNav({ className }: SidebarNavProps) {
         variant="ghost"
         size="sm"
         onClick={() => setIsMobileOpen(!isMobileOpen)}
-        className="fixed top-4 left-4 z-50 lg:hidden bg-gray-900/80 backdrop-blur-sm border border-gray-700"
+        className="fixed top-4 left-4 z-50 lg:hidden bg-black/40 backdrop-blur-md border border-white/20 shadow-lg"
       >
         {isMobileOpen ? (
           <X className="w-5 h-5" />
@@ -241,7 +245,7 @@ export function SidebarNav({ className }: SidebarNavProps) {
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className="fixed left-0 top-0 bottom-0 w-80 bg-gray-900 border-r border-gray-800 z-50 lg:hidden"
+            className="fixed left-0 top-0 bottom-0 w-80 bg-black/60 backdrop-blur-md border-r border-white/20 z-50 lg:hidden shadow-2xl"
           >
             <SidebarContent />
           </motion.aside>
@@ -254,7 +258,7 @@ export function SidebarNav({ className }: SidebarNavProps) {
         animate={isCollapsed ? "collapsed" : "expanded"}
         transition={{ duration: 0.3, ease: "easeInOut" }}
         className={cn(
-          "hidden lg:flex flex-col bg-gray-900 border-r border-gray-800 h-screen sticky top-0",
+          "hidden lg:flex flex-col bg-black/40 backdrop-blur-md border-r border-white/10 h-screen sticky top-0 shadow-2xl",
           className,
         )}
       >

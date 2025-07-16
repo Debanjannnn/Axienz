@@ -1,15 +1,36 @@
-"use client"
+"use client";
 
-import { useEffect, useState, useCallback } from "react"  // Added useCallback
-import { isAddress } from "ethers"
-import { useSmartWill } from "@/context/SmartWillContext"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { ScrollText, AlertCircle, Info, Clock, GraduationCap, BookOpen, Loader2, Wallet } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useEffect, useState, useCallback } from "react";
+import { isAddress } from "ethers";
+import { useSmartWill } from "@/context/SmartWillContext";
+import {
+  getBNBPrice,
+  convertBNBToUSD,
+  formatUSD,
+  formatBNB,
+} from "@/utils/usdConversion";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import {
+  ScrollText,
+  AlertCircle,
+  Info,
+  Clock,
+  Loader2,
+  Wallet,
+  DollarSign,
+  RefreshCw,
+} from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogTrigger,
@@ -17,30 +38,40 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from "@/components/ui/dialog"
-import { Checkbox } from "@/components/ui/checkbox"
-import { useRouter } from "next/navigation"
-import { AnimatedShinyText } from "./magicui/animated-shiny-text"
-import { IconArrowLeft } from "@tabler/icons-react"
-import { DotBackground } from "./animateddots"
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useRouter } from "next/navigation";
+import { IconArrowLeft } from "@tabler/icons-react";
 
 export default function CreateSimpleWill() {
-  const router = useRouter()
+  const router = useRouter();
+  const {
+    account,
+    isConnected,
+    connectWallet,
+    createNormalWill,
+    hasCreatedWill,
+    loading: contextLoading,
+    error: contextError,
+  } = useSmartWill();
+
   const [formData, setFormData] = useState({
     beneficiary: "",
     assets: "",
     amount: "",
-    claimWaitTime: "",
-  })
-  const [validationError, setValidationError] = useState("")
-  const [openDialog, setOpenDialog] = useState(false)
-  const [checkingWill, setCheckingWill] = useState(true)
-  const [hasWill, setHasWill] = useState(false)
+    claimWaitTime: "31536000", // 1 year in seconds
+  });
 
-  // Add this near the other state declarations at the top
-  const [transactionHash, setTransactionHash] = useState("")
-  const [creatingWill, setCreatingWill] = useState(false)
-  const [waitingForSignature, setWaitingForSignature] = useState(false)
+  const [validationError, setValidationError] = useState("");
+  const [openDialog, setOpenDialog] = useState(false);
+  const [checkingWill, setCheckingWill] = useState(true);
+  const [hasWill, setHasWill] = useState(false);
+  const [transactionHash, setTransactionHash] = useState("");
+  const [creatingWill, setCreatingWill] = useState(false);
+  const [waitingForSignature, setWaitingForSignature] = useState(false);
+  const [bnbPrice, setBnbPrice] = useState(null);
+  const [amountUSD, setAmountUSD] = useState(0);
+  const [loadingPrice, setLoadingPrice] = useState(false);
 
   const [confirmationChecks, setConfirmationChecks] = useState({
     termsAccepted: false,
@@ -48,475 +79,658 @@ export default function CreateSimpleWill() {
     understandFees: false,
     confirmBeneficiary: false,
     createBackup: false,
-    allowDistribution: false,
-    understandLock: false,
-    acceptRisks: false,
-  })
+  });
 
-  const {
-    account,
-    balance,
-    connectWallet,
-    createNormalWill,
-    loading,
-    error,
-    isConnected,
-    hasCreatedWill,
-    chainId,
-  } = useSmartWill()
-
-  useEffect(() => {
-    if (!isConnected) {
-      connectWallet()
+  // Fetch BNB price
+  const fetchBNBPrice = useCallback(async () => {
+    setLoadingPrice(true);
+    try {
+      const price = await getBNBPrice();
+      setBnbPrice(price);
+    } catch (error) {
+      console.error("Error fetching BNB price:", error);
+    } finally {
+      setLoadingPrice(false);
     }
-  }, [isConnected])
+  }, []);
 
-  // Check Will Status Effect - Moved to useCallback for correct memoization
-  const checkWillStatus = useCallback(async () => {
-    if (account && isConnected) {
-      setCheckingWill(true)
+  // Calculate USD value when amount changes
+  const calculateUSDValue = useCallback(async () => {
+    if (formData.amount && bnbPrice) {
       try {
-        const willExists = await hasCreatedWill(account)
-        setHasWill(willExists)
-        if (willExists) {
-          router.push('/check-my-will/simple')
-        }
+        const usdValue = await convertBNBToUSD(formData.amount);
+        setAmountUSD(usdValue);
       } catch (error) {
-        console.error("Error checking will status:", error)
-      } finally {
-        setCheckingWill(false)
+        console.error("Error calculating USD value:", error);
+        setAmountUSD(0);
       }
     } else {
-      setCheckingWill(false)
+      setAmountUSD(0);
     }
-  }, [account, isConnected, router, hasCreatedWill])
+  }, [formData.amount, bnbPrice]);
+
+  // Check if user already has a will
+  const checkWillStatus = useCallback(async () => {
+    if (account && isConnected) {
+      try {
+        setCheckingWill(true);
+        const willExists = await hasCreatedWill();
+        setHasWill(willExists);
+
+        if (willExists) {
+          // Redirect to check will page if they already have one
+          router.push("/check-my-will");
+        }
+      } catch (error) {
+        console.error("Error checking will status:", error);
+      } finally {
+        setCheckingWill(false);
+      }
+    }
+  }, [account, isConnected, hasCreatedWill, router]);
 
   useEffect(() => {
-    checkWillStatus()  // Call the memoized function
-  }, [])
+    fetchBNBPrice();
+  }, [fetchBNBPrice]);
 
-  // Handle Submit Effect
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!isConnected) {
-      await connectWallet()
-      return
+  useEffect(() => {
+    calculateUSDValue();
+  }, [calculateUSDValue]);
+
+  useEffect(() => {
+    if (isConnected && account) {
+      checkWillStatus();
+    } else {
+      setCheckingWill(false);
     }
-    if (!validateForm()) return
+  }, [isConnected, account, checkWillStatus]);
+
+  const handleInputChange = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    setValidationError("");
+  };
+
+  const handleCheckboxChange = (field) => {
+    setConfirmationChecks((prev) => ({ ...prev, [field]: !prev[field] }));
+  };
+
+  const validateForm = () => {
+    if (!formData.beneficiary.trim()) {
+      setValidationError("Beneficiary address is required");
+      return false;
+    }
+
+    if (!isAddress(formData.beneficiary)) {
+      setValidationError("Please enter a valid Ethereum address");
+      return false;
+    }
+
+    if (formData.beneficiary.toLowerCase() === account?.toLowerCase()) {
+      setValidationError(
+        "Beneficiary cannot be the same as your wallet address",
+      );
+      return false;
+    }
+
+    if (!formData.assets.trim()) {
+      setValidationError("Asset description is required");
+      return false;
+    }
+
+    if (!formData.amount || parseFloat(formData.amount) <= 0) {
+      setValidationError("Please enter a valid amount greater than 0");
+      return false;
+    }
+
+    if (parseFloat(formData.amount) > 1000) {
+      setValidationError("Amount cannot exceed 1000 BNB for security reasons");
+      return false;
+    }
+
+    return true;
+  };
+
+  const validateConfirmations = () => {
+    const allChecked = Object.values(confirmationChecks).every(
+      (checked) => checked,
+    );
+    if (!allChecked) {
+      setValidationError("Please confirm all requirements before proceeding");
+      return false;
+    }
+    return true;
+  };
+
+  const handleCreateWill = async () => {
+    if (!validateForm() || !validateConfirmations()) {
+      return;
+    }
 
     try {
-      setCreatingWill(true)
-      setWaitingForSignature(true)
-      setTransactionHash("") // Reset transaction hash before starting
-
-      // Add balance check
-      const requiredAmount = Number(formData.amount)
-      if (Number(balance) < requiredAmount) {
-        throw new Error(`Insufficient balance. You need ${requiredAmount} BNB but have ${Number(balance).toFixed(4)} BNB`)
-      }
+      setCreatingWill(true);
+      setWaitingForSignature(true);
+      setValidationError("");
 
       const success = await createNormalWill(
         formData.beneficiary,
         formData.assets,
         formData.amount,
-        formData.claimWaitTime,
+        parseInt(formData.claimWaitTime),
         (hash) => {
-          setTransactionHash(hash)
-          setWaitingForSignature(false)
-        }
-      )
+          setTransactionHash(hash);
+          setWaitingForSignature(false);
+        },
+      );
 
       if (success) {
-        setFormData({ beneficiary: "", assets: "", amount: "", claimWaitTime: "" })
-        setOpenDialog(false)
-        setConfirmationChecks(Object.keys(confirmationChecks).reduce((acc, key) => ({ ...acc, [key]: false }), {}))
-        // Maybe add a success notification here
+        // Redirect to check-my-will page after successful creation
+        setTimeout(() => {
+          router.push("/check-my-will");
+        }, 2000);
+      } else {
+        setValidationError("Failed to create will. Please try again.");
       }
-    } catch (err) {
-      console.error("Error submitting will:", err)
-      setError(err.message || "Failed to create will. Please try again.")
+    } catch (error) {
+      console.error("Error creating will:", error);
+      setValidationError(
+        error.message || "Failed to create will. Please try again.",
+      );
     } finally {
-      setCreatingWill(false)
-      setWaitingForSignature(false)
+      setCreatingWill(false);
+      setWaitingForSignature(false);
     }
-}
+  };
 
-
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
-    setValidationError("")
-  }
-
-  const handleCheckboxChange = (name) => {
-    setConfirmationChecks((prev) => ({ ...prev, [name]: !prev[name] }))
-  }
-
-  const getConfirmationLabel = (key) => {
-    const labels = {
-      termsAccepted: "Accept Terms and Conditions",
-      understandInactivity: "Understand Inactivity Period",
-      understandFees: "Acknowledge Service Fee",
-      confirmBeneficiary: "Confirm Beneficiary",
-      createBackup: "Create Backup",
-      allowDistribution: "Allow Distribution",
-      understandLock: "Understand Asset Lock",
-      acceptRisks: "Accept Risks",
-    }
-    return labels[key] || key
-  }
-
-  const getConfirmationDescription = (key) => {
-    const descriptions = {
-      termsAccepted: "I accept the terms and conditions of the Educational Smart Will service",
-      understandInactivity: "My academic beneficiary can only claim after 10 years of account inactivity",
-      understandFees: "A 2% service fee in BNB tokens will support the Open Campus ecosystem",
-      confirmBeneficiary: "The beneficiary address belongs to my chosen academic successor",
-      createBackup: "I have securely backed up my wallet credentials and academic documentation",
-      allowDistribution: "If unclaimed, I allow distribution to the Open Campus scholarship fund",
-      understandLock: "Academic assets will be locked for minimum 1 year after creation",
-      acceptRisks: "I understand and accept all risks associated with blockchain-based academic asset transfer",
-    }
-    return descriptions[key] || ""
-  }
-
-  const ConfirmationCheckboxes = () => (
-    <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-4">
-      {Object.entries(confirmationChecks).map(([key, value]) => (
-        <div
-          key={key}
-          className="flex items-start space-x-3 p-3 rounded-lg bg-secondary/20 hover:bg-secondary/30 transition-colors"
-        >
-          <Checkbox id={key} checked={value} onCheckedChange={() => handleCheckboxChange(key)} className="mt-1" />
-          <div className="space-y-1">
-            <Label htmlFor={key} className="text-sm font-medium leading-none cursor-pointer">
-              {getConfirmationLabel(key)}
-            </Label>
-            <p className="text-xs text-muted-foreground">{getConfirmationDescription(key)}</p>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-
-  if (creatingWill) {
+  // Show connect wallet if not connected
+  if (!isConnected) {
     return (
-      <DotBackground>
-      <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center space-y-6">
-              <Loader2 className="h-12 w-12 animate-spin text-primary stroke-[3px]" />
-
-              <div className="text-center space-y-2">
-                <h3 className="text-xl font-semibold">
-                  {waitingForSignature
-                    ? "Please Confirm Transaction"
-                    : "Creating Your Academic Will"}
-                </h3>
-
-                <p className="text-muted-foreground">
-                  {waitingForSignature ? (
-                    <>
-                      Please accept the MetaMask request and confirm the transaction<br />
-                      <span className="font-medium">Amount to deposit: {formData.amount} BNB</span>
-                    </>
-                  ) : (
-                    "Waiting for the transaction to be mined..."
-                  )}
-                </p>
-              </div>
-
-              {transactionHash && (
-                <div className="w-full space-y-2">
-                  <p className="text-sm text-muted-foreground text-center">Transaction Hash:</p>
-                  <a
-                    href={`${process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL}/tx/${transactionHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-primary hover:text-primary/80 break-all text-center block"
-                  >
-                    {transactionHash}
-                  </a>
-                </div>
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl text-white">
+              Connect Your Wallet
+            </CardTitle>
+            <CardDescription className="text-gray-400">
+              Please connect your wallet to create a digital will
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex justify-center">
+            <Button
+              onClick={connectWallet}
+              disabled={contextLoading}
+              className="bg-amber-500 hover:bg-amber-600 text-black font-bold py-2 px-6 rounded transition-colors"
+            >
+              {contextLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                <>
+                  <Wallet className="mr-2 h-4 w-4" />
+                  Connect Wallet
+                </>
               )}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show loading state while checking will status
+  if (checkingWill) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+          <CardContent className="flex items-center justify-center p-8">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin text-amber-400 mx-auto mb-4" />
+              <p className="text-white">Checking your will status...</p>
             </div>
           </CardContent>
         </Card>
       </div>
-      </DotBackground>
-    )
-  }
-
-  if (loading || checkingWill) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="w-full max-w-md bg-transparent backdrop-blur-sm">
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center space-y-4">
-              <Loader2 className="h-10 w-10 animate-spin text-primary stroke-[3px]" />
-              <p className="text-lg font-medium text-center">
-                {checkingWill
-                  ? "Checking your will status..."
-                  : "Switching your network to BNB Chain Testnet and connecting BNB Legacy with it. Please accept the connection request in your wallet."}
-              </p>
-              <p className="text-sm text-muted-foreground text-center">
-                This process may take a few seconds. Please be patient.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  if (hasWill) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="w-full max-w-md bg-transparent backdrop-blur-sm">
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center space-y-4">
-              <Loader2 className="h-10 w-10 animate-spin text-primary stroke-[3px]" />
-              <p className="text-lg font-medium text-center">
-                You already have an existing will. Redirecting you to the management page...
-              </p>
-              <p className="text-sm text-muted-foreground text-center">
-                Please wait a moment.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  // Wallet Info Component
-  const WalletInfo = () => {
-    if (!account) return null
-
-    return (
-      <Card className="mb-8 bg-transparent backdrop-blur-sm">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Wallet className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-sm text-muted-foreground">Connected Wallet</p>
-                <p className="font-medium">
-                  {account.slice(0, 6)}...{account.slice(-4)}
-                </p>
-              </div>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Balance</p>
-              <p className="font-medium">{Number(balance).toFixed(4)} BNB</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  const validateForm = () => {
-    if (formData.assets.length < 50) {
-      setValidationError("Description must be at least 50 characters long")
-      return false
-    }
-    if (!formData.amount || Number.parseFloat(formData.amount) <= 0) {
-      setValidationError("Initial deposit amount is required")
-      return false
-    }
-    if (!isAddress(formData.beneficiary)) {
-      setValidationError("Invalid beneficiary address")
-      return false
-    }
-
-    if (!formData.claimWaitTime || Number.parseInt(formData.claimWaitTime) < 60) {
-      setValidationError("Claim wait time must be at least 60 seconds")
-      return false
-    }
-
-    if (!Object.values(confirmationChecks).every(Boolean)) {
-      setValidationError("Please confirm all conditions before proceeding")
-      return false
-    }
-    setValidationError("")
-    return true
-  }
-
-  const goHome = () => {
-    router.push("/")
+    );
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 py-8">
-      <Button onClick={goHome} variant="outline" className="absolute top-4 left-4 flex items-center hover:bg-transparent rounded-full bg-transparent backdrop-blur-sm">
-      <AnimatedShinyText className="text-sm">Back to Home</AnimatedShinyText>
-      </Button>
-      <WalletInfo />
+    <div className="min-h-screen p-6">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <Button
+            variant="ghost"
+            onClick={() => router.back()}
+            className="mb-4 text-gray-400 hover:text-white"
+          >
+            <IconArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+          <h1 className="text-4xl font-bold text-white mb-2">
+            Create Simple Will
+          </h1>
+          <p className="text-gray-400">
+            Secure your digital assets with our blockchain-based will system
+          </p>
+        </div>
 
-      {(error || validationError) && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error || validationError}</AlertDescription>
-        </Alert>
-      )}
-
-      <Card className="border bg-transparent backdrop-blur-sm shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-3xl font-display text-center text-gray-200">Create Your Academic Legacy</CardTitle>
-          <CardDescription className="text-center text-muted-foreground">
-            Secure your educational assets and intellectual property on Open Campus
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-4">
-              <div className="relative">
-                <Label htmlFor="beneficiary" className="text-lg text-foreground flex items-center gap-2">
-                  <GraduationCap className="w-4 h-4" /> Academic Beneficiary Address
+        {/* Main Form */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Form Section */}
+          <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <ScrollText className="w-5 h-5 text-amber-400" />
+                Will Details
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Enter the details for your digital will
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Beneficiary */}
+              <div className="space-y-2">
+                <Label htmlFor="beneficiary" className="text-white">
+                  Beneficiary Address *
                 </Label>
                 <Input
-                  type="text"
                   id="beneficiary"
-                  name="beneficiary"
-                  value={formData.beneficiary}
-                  onChange={handleChange}
-                  className="bg-input border-input text-foreground focus:ring-2 focus:ring-ring focus:border-ring placeholder:text-muted-foreground mt-2"
                   placeholder="0x..."
-                  required
+                  value={formData.beneficiary}
+                  onChange={(e) =>
+                    handleInputChange("beneficiary", e.target.value)
+                  }
+                  className="bg-white/5 border-white/20 text-white placeholder:text-gray-500"
                 />
+                <p className="text-xs text-gray-400">
+                  The wallet address that will inherit your assets
+                </p>
               </div>
 
-              <div className="relative">
-                <Label htmlFor="amount" className="text-lg text-foreground flex items-center gap-2">
-                  <BookOpen className="w-4 h-4" /> Initial BNB Token Deposit
-                </Label>
-                <Input
-                  type="number"
-                  id="amount"
-                  name="amount"
-                  value={formData.amount}
-                  onChange={handleChange}
-                  className="bg-input border-input text-foreground focus:ring-2 focus:ring-ring focus:border-ring placeholder:text-muted-foreground mt-2"
-                  placeholder="100"
-                  step="0.000001"
-                  min="0"
-                  required
-                />
-                {formData.amount && (
-                  <div className="mt-2 text-sm text-muted-foreground flex items-center gap-2">
-                    <Info className="w-4 h-4" />
-                    Final deposit: {(Number(formData.amount) * 0.98).toFixed(6)} BNB (2% supports BNB Legacy Scholarship)
-                  </div>
-                )}
-              </div>
-
-              <div className="relative">
-                <Label htmlFor="assets" className="text-lg text-foreground flex items-center gap-2">
-                  <ScrollText className="w-4 h-4" /> Academic Assets Description
+              {/* Asset Description */}
+              <div className="space-y-2">
+                <Label htmlFor="assets" className="text-white">
+                  Asset Description *
                 </Label>
                 <Textarea
                   id="assets"
-                  name="assets"
+                  placeholder="Describe the assets to be inherited..."
                   value={formData.assets}
-                  onChange={handleChange}
-                  className="bg-input border-input text-foreground focus:ring-2 focus:ring-ring focus:border-ring placeholder:text-muted-foreground mt-2 min-h-[120px]"
-                  placeholder="Describe your academic assets (research papers, intellectual property, educational resources)..."
-                  required
+                  onChange={(e) => handleInputChange("assets", e.target.value)}
+                  className="bg-white/5 border-white/20 text-white placeholder:text-gray-500 min-h-[100px]"
                 />
-                <div className="mt-1 text-sm text-muted-foreground">{formData.assets.length}/50 characters</div>
+                <p className="text-xs text-gray-400">
+                  Detailed description of what will be inherited
+                </p>
               </div>
 
-                {/* Custom Claim Wait Time Section */}
-              <div className="relative">
-                <Label htmlFor="claimWaitTime" className="text-lg text-foreground flex items-center gap-2">
-                  <Clock className="w-4 h-4" /> Custom Claim Wait Time (only on Testnet)
+              {/* Amount */}
+              <div className="space-y-2">
+                <Label htmlFor="amount" className="text-white">
+                  Amount (BNB) *
                 </Label>
-                <div className="mt-2 p-4 rounded-lg bg-secondary/20 border border-secondary/30">
+                <div className="relative">
                   <Input
+                    id="amount"
                     type="number"
-                    id="claimWaitTime"
-                    name="claimWaitTime"
-                    value={formData.claimWaitTime}
-                    onChange={handleChange}
-                    className="bg-input border-input text-foreground focus:ring-2 focus:ring-ring focus:border-ring placeholder:text-muted-foreground"
-                    placeholder="60"
-                    min="60"
-                    required
+                    step="0.0001"
+                    min="0"
+                    max="1000"
+                    placeholder="0.0"
+                    value={formData.amount}
+                    onChange={(e) =>
+                      handleInputChange("amount", e.target.value)
+                    }
+                    className="bg-white/5 border-white/20 text-white placeholder:text-gray-500 pr-20"
                   />
-                  <div className="mt-3 space-y-2">
-                    <div className="flex items-start gap-2">
-                      <Info className="w-4 h-4 mt-1 text-primary" />
-                      <div className="text-sm text-muted-foreground">
-                        <p className="font-medium text-primary mb-1">Testnet Configuration</p>
-                        <p>For testing purposes, you can set a custom wait time (minimum 60 seconds). This allows you to experience the full functionality without waiting for extended periods.</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2 mt-2">
-                      <Clock className="w-4 h-4 mt-1 text-primary" />
-                      <div className="text-sm text-muted-foreground">
-                        <p className="font-medium text-primary mb-1">Mainnet Behavior</p>
-                        <p>On mainnet, the wait time is automatically set to 10 years to ensure proper academic legacy protection. We value your feedback for potential improvements to this timeframe.</p>
-                      </div>
-                    </div>
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-amber-400 font-medium">
+                    BNB
                   </div>
                 </div>
+                {formData.amount && bnbPrice && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">USD Value:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-white font-medium">
+                        {formatUSD(amountUSD)}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={fetchBNBPrice}
+                        disabled={loadingPrice}
+                        className="p-1 h-auto text-gray-400 hover:text-amber-400"
+                      >
+                        <RefreshCw
+                          className={`w-3 h-3 ${loadingPrice ? "animate-spin" : ""}`}
+                        />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-gray-400">
+                  Amount to be locked and inherited (max 1000 BNB)
+                </p>
               </div>
-              {/* End Custom Claim Wait Time Section */}
-            </div>
 
-            <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-              <DialogTrigger asChild>
-                <Button
-                  type="button"
-                  className="w-full bg-transparent backdrop-blur-sm hover:dark:bg-white/10 hover:dark:text-black border rounded-full px-6 py-6"
+              {/* Wait Time */}
+              <div className="space-y-2">
+                <Label htmlFor="waitTime" className="text-white">
+                  Claim Wait Time
+                </Label>
+                <select
+                  id="waitTime"
+                  value={formData.claimWaitTime}
+                  onChange={(e) =>
+                    handleInputChange("claimWaitTime", e.target.value)
+                  }
+                  className="w-full bg-white/5 border border-white/20 text-white rounded-md px-3 py-2"
                 >
-                  <AnimatedShinyText className="text-lg">Secure Academic Legacy</AnimatedShinyText>
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl bg-transparent backdrop-blur-xl rounded-2xl">
-                <DialogTitle>Confirm Academic Will Creation</DialogTitle>
-                <DialogDescription>
-                  Please review and confirm the following conditions for your educational legacy
-                </DialogDescription>
+                  <option value="2592000">1 Month</option>
+                  <option value="7776000">3 Months</option>
+                  <option value="15552000">6 Months</option>
+                  <option value="31536000">1 Year (Recommended)</option>
+                  <option value="63072000">2 Years</option>
+                </select>
+                <p className="text-xs text-gray-400">
+                  Time before beneficiary can claim after your last activity
+                </p>
+              </div>
 
-                <div className="my-4">
-                  <div className="flex justify-between text-sm mb-2">
-                    <span>Completion Progress</span>
-                    <span>
-                      {Object.values(confirmationChecks).filter(Boolean).length} /{" "}
-                      {Object.keys(confirmationChecks).length}
-                    </span>
+              {/* Error Display */}
+              {(validationError || contextError) && (
+                <Alert
+                  variant="destructive"
+                  className="bg-red-900/20 border-red-500/50"
+                >
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    {validationError || contextError}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Create Button */}
+              <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+                <DialogTrigger asChild>
+                  <Button
+                    onClick={() => {
+                      if (validateForm()) {
+                        setOpenDialog(true);
+                      }
+                    }}
+                    disabled={
+                      creatingWill ||
+                      !formData.beneficiary ||
+                      !formData.assets ||
+                      !formData.amount
+                    }
+                    className="w-full bg-amber-500 hover:bg-amber-600 text-black font-bold py-3 transition-colors"
+                  >
+                    {creatingWill ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {waitingForSignature
+                          ? "Waiting for signature..."
+                          : "Creating Will..."}
+                      </>
+                    ) : (
+                      "Create Will"
+                    )}
+                  </Button>
+                </DialogTrigger>
+
+                {/* Confirmation Dialog */}
+                <DialogContent className="bg-gray-900 border border-white/20 text-white max-w-md">
+                  <DialogTitle>Confirm Will Creation</DialogTitle>
+                  <DialogDescription className="text-gray-400">
+                    Please review and confirm the following before creating your
+                    will:
+                  </DialogDescription>
+
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-3">
+                      <div className="flex items-start space-x-3">
+                        <Checkbox
+                          checked={confirmationChecks.termsAccepted}
+                          onCheckedChange={() =>
+                            handleCheckboxChange("termsAccepted")
+                          }
+                        />
+                        <label className="text-sm">
+                          I understand this will is immutable once created
+                        </label>
+                      </div>
+
+                      <div className="flex items-start space-x-3">
+                        <Checkbox
+                          checked={confirmationChecks.understandInactivity}
+                          onCheckedChange={() =>
+                            handleCheckboxChange("understandInactivity")
+                          }
+                        />
+                        <label className="text-sm">
+                          I understand the beneficiary can claim after{" "}
+                          {formData.claimWaitTime === "31536000"
+                            ? "1 year"
+                            : formData.claimWaitTime === "2592000"
+                              ? "1 month"
+                              : formData.claimWaitTime === "7776000"
+                                ? "3 months"
+                                : formData.claimWaitTime === "15552000"
+                                  ? "6 months"
+                                  : "2 years"}{" "}
+                          of inactivity
+                        </label>
+                      </div>
+
+                      <div className="flex items-start space-x-3">
+                        <Checkbox
+                          checked={confirmationChecks.confirmBeneficiary}
+                          onCheckedChange={() =>
+                            handleCheckboxChange("confirmBeneficiary")
+                          }
+                        />
+                        <label className="text-sm">
+                          I have verified the beneficiary address is correct
+                        </label>
+                      </div>
+
+                      <div className="flex items-start space-x-3">
+                        <Checkbox
+                          checked={confirmationChecks.understandFees}
+                          onCheckedChange={() =>
+                            handleCheckboxChange("understandFees")
+                          }
+                        />
+                        <label className="text-sm">
+                          I understand network fees will apply for this
+                          transaction
+                        </label>
+                      </div>
+
+                      <div className="flex items-start space-x-3">
+                        <Checkbox
+                          checked={confirmationChecks.createBackup}
+                          onCheckedChange={() =>
+                            handleCheckboxChange("createBackup")
+                          }
+                        />
+                        <label className="text-sm">
+                          I will save the beneficiary address and will details
+                          securely
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Summary */}
+                    <div className="border-t border-white/20 pt-4 space-y-2">
+                      <h4 className="font-medium">Will Summary:</h4>
+                      <div className="text-sm text-gray-400 space-y-1">
+                        <p>
+                          Amount: {formatBNB(formData.amount)} (
+                          {formatUSD(amountUSD)})
+                        </p>
+                        <p>
+                          Beneficiary: {formData.beneficiary.slice(0, 10)}...
+                        </p>
+                        <p>
+                          Wait Time:{" "}
+                          {formData.claimWaitTime === "31536000"
+                            ? "1 year"
+                            : formData.claimWaitTime === "2592000"
+                              ? "1 month"
+                              : formData.claimWaitTime === "7776000"
+                                ? "3 months"
+                                : formData.claimWaitTime === "15552000"
+                                  ? "6 months"
+                                  : "2 years"}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="w-full h-2 rounded-full">
-                    <div
-                      className="bg-primary h-2 rounded-full transition-all duration-300 ease-in-out"
-                      style={{
-                        width: `${(Object.values(confirmationChecks).filter(Boolean).length / Object.keys(confirmationChecks).length) * 100}%`,
-                      }}
-                    ></div>
+
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setOpenDialog(false)}
+                      className="border-white/20 text-white hover:bg-white/10"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleCreateWill}
+                      disabled={
+                        !Object.values(confirmationChecks).every(
+                          (checked) => checked,
+                        ) || creatingWill
+                      }
+                      className="bg-amber-500 hover:bg-amber-600 text-black"
+                    >
+                      {creatingWill ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Creating...
+                        </>
+                      ) : (
+                        "Create Will"
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Transaction Hash Display */}
+              {transactionHash && (
+                <Alert className="bg-blue-900/20 border-blue-500/50">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    <div className="space-y-2">
+                      <p>Transaction submitted!</p>
+                      <p className="text-sm font-mono break-all">
+                        {transactionHash}
+                      </p>
+                      <p className="text-xs">
+                        Your will is being created on the blockchain...
+                      </p>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Info Section */}
+          <div className="space-y-6">
+            {/* BNB Price Info */}
+            <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-amber-400" />
+                  Current BNB Price
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-white mb-2">
+                  ${bnbPrice ? bnbPrice.toFixed(2) : "Loading..."}
+                </div>
+                <p className="text-sm text-gray-400">
+                  Live price used for USD calculations
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* How it Works */}
+            <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Info className="w-5 h-5 text-amber-400" />
+                  How It Works
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3 text-sm text-gray-300">
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-amber-500 text-black rounded-full flex items-center justify-center text-xs font-bold mt-0.5">
+                      1
+                    </div>
+                    <p>
+                      Lock your BNB in a secure smart contract with your chosen
+                      beneficiary
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-amber-500 text-black rounded-full flex items-center justify-center text-xs font-bold mt-0.5">
+                      2
+                    </div>
+                    <p>
+                      Stay active by pinging the contract or making transactions
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-amber-500 text-black rounded-full flex items-center justify-center text-xs font-bold mt-0.5">
+                      3
+                    </div>
+                    <p>
+                      If inactive for the set period, your beneficiary can claim
+                      the assets
+                    </p>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
 
-                <ConfirmationCheckboxes />
-
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setOpenDialog(false)} className="mr-2">
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={loading || !Object.values(confirmationChecks).every(Boolean)}
-                    className="bg-primary text-primary-foreground"
-                  >
-                    {loading ? "Creating..." : "Secure Academic Legacy"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </form>
-        </CardContent>
-      </Card>
+            {/* Security Features */}
+            <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-amber-400" />
+                  Security Features
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-gray-300">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <span>Immutable once created</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <span>Blockchain verified transactions</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <span>Time-locked security</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <span>1-year withdrawal cooldown</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
     </div>
-  )
+  );
 }

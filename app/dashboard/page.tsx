@@ -1,138 +1,261 @@
-"use client"
+"use client";
 
-import { useEffect, useState, useCallback } from "react"
-import { motion } from "framer-motion"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { useEffect, useState, useCallback } from "react";
+import { motion } from "framer-motion";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { DashboardLayout } from "@/components/layouts/dashboard-layout";
+import { useSmartWill } from "@/context/SmartWillContext";
+import {
+  getBNBPrice,
+  convertBNBToUSD,
+  formatUSD,
+  formatBNB,
+} from "@/utils/usdConversion";
 import {
   Wallet,
   Activity,
   TrendingUp,
   RefreshCw,
-  BarChart3,
-  Zap,
   Shield,
   FileText,
   Users,
   Settings,
-} from "lucide-react"
+  DollarSign,
+  Clock,
+  AlertCircle,
+  Plus,
+} from "lucide-react";
 
 interface BNBPrice {
-  price: number
-  cached: boolean
-  timestamp: number
-  error?: string
-}
-
-interface ActivityItem {
-  id: string
-  type: string
-  description: string
-  amount: string
-  hash: string
-  timestamp: number
-  status: string
-}
-
-interface DashboardActivity {
-  address: string
-  activities: ActivityItem[]
-  total: number
-  timestamp: number
+  price: number;
+  cached: boolean;
+  timestamp: number;
+  error?: string;
 }
 
 export default function DashboardPage() {
-  const [account, setAccount] = useState<string>("0xdc5...c52e")
-  const [balance, setBalance] = useState<string>("0.0000")
-  const [isConnected, setIsConnected] = useState(true)
-  const [bnbPrice, setBnbPrice] = useState<BNBPrice | null>(null)
-  const [activity, setActivity] = useState<DashboardActivity | null>(null)
-  const [loadingPrice, setLoadingPrice] = useState(false)
-  const [loadingActivity, setLoadingActivity] = useState(false)
+  const {
+    account,
+    balance,
+    isConnected,
+    connectWallet,
+    loading: walletLoading,
+    error: walletError,
+    getContractBalance,
+    getNormalWill,
+    hasCreatedWill,
+    getNormalWillsAsBeneficiary,
+  } = useSmartWill();
+
+  const [bnbPrice, setBnbPrice] = useState<BNBPrice | null>(null);
+  const [contractBalance, setContractBalance] = useState("0");
+  const [userWillData, setUserWillData] = useState<any>(null);
+  const [claimableWills, setClaimableWills] = useState<any[]>([]);
+  const [loadingPrice, setLoadingPrice] = useState(false);
+  const [loadingWillData, setLoadingWillData] = useState(false);
+  const [loadingClaimables, setLoadingClaimables] = useState(false);
+  const [balanceUSD, setBalanceUSD] = useState(0);
+  const [contractBalanceUSD, setContractBalanceUSD] = useState(0);
+  const [userWillAmountUSD, setUserWillAmountUSD] = useState(0);
 
   const fetchBNBPrice = async () => {
-    setLoadingPrice(true)
+    setLoadingPrice(true);
     try {
-      const response = await fetch("/api/bnb-price")
-      const data = await response.json()
-      setBnbPrice(data)
+      const price = await getBNBPrice();
+      setBnbPrice({
+        price,
+        cached: false,
+        timestamp: Date.now(),
+      });
     } catch (error) {
-      console.error("Error fetching BNB price:", error)
+      console.error("Error fetching BNB price:", error);
     } finally {
-      setLoadingPrice(false)
+      setLoadingPrice(false);
     }
-  }
+  };
 
-  const fetchActivity = useCallback(async () => {
-    if (!account) return
+  const fetchWillData = useCallback(async () => {
+    if (!account) return;
 
-    setLoadingActivity(true)
+    setLoadingWillData(true);
     try {
-      const response = await fetch(`/api/dashboard/activity?address=${account}`)
-      const data = await response.json()
-      setActivity(data)
+      const [hasWill, contractBal] = await Promise.all([
+        hasCreatedWill(account),
+        getContractBalance(),
+      ]);
+
+      let willData = null;
+      if (hasWill) {
+        willData = await getNormalWill(account);
+      }
+
+      setUserWillData(hasWill ? willData : null);
+      setContractBalance(contractBal);
+
+      // Convert contract balance to USD
+      if (bnbPrice) {
+        const contractUSD = await convertBNBToUSD(contractBal);
+        setContractBalanceUSD(contractUSD);
+
+        // Convert user will amount to USD
+        if (willData && willData.amount) {
+          const willAmountBNB = parseFloat(willData.amount.toString()) / 1e18;
+          const willAmountUSD = await convertBNBToUSD(willAmountBNB);
+          setUserWillAmountUSD(willAmountUSD);
+        }
+      }
     } catch (error) {
-      console.error("Error fetching activity:", error)
+      console.error("Error fetching will data:", error);
     } finally {
-      setLoadingActivity(false)
+      setLoadingWillData(false);
     }
-  }, [account])
+  }, [account, hasCreatedWill, getNormalWill, getContractBalance, bnbPrice]);
+
+  const fetchClaimableWills = useCallback(async () => {
+    if (!account) return;
+
+    setLoadingClaimables(true);
+    try {
+      const claimables = await getNormalWillsAsBeneficiary(account);
+      setClaimableWills(claimables || []);
+    } catch (error) {
+      console.error("Error fetching claimable wills:", error);
+      setClaimableWills([]);
+    } finally {
+      setLoadingClaimables(false);
+    }
+  }, [account, getNormalWillsAsBeneficiary]);
+
+  const updateBalanceUSD = useCallback(async () => {
+    if (balance && bnbPrice) {
+      const usd = await convertBNBToUSD(balance);
+      setBalanceUSD(usd);
+    }
+  }, [balance, bnbPrice]);
 
   useEffect(() => {
-    fetchBNBPrice()
-    fetchActivity()
-    const priceInterval = setInterval(fetchBNBPrice, 60000)
-    return () => clearInterval(priceInterval)
-  }, [fetchActivity])
+    fetchBNBPrice();
+  }, []);
+
+  useEffect(() => {
+    if (isConnected && account) {
+      fetchWillData();
+      fetchClaimableWills();
+    }
+  }, [isConnected, account, fetchWillData, fetchClaimableWills]);
+
+  useEffect(() => {
+    updateBalanceUSD();
+  }, [updateBalanceUSD]);
+
+  useEffect(() => {
+    // Auto refresh data every 30 seconds
+    const interval = setInterval(() => {
+      if (isConnected && account) {
+        fetchBNBPrice();
+        fetchWillData();
+        fetchClaimableWills();
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [isConnected, account, fetchWillData, fetchClaimableWills]);
 
   const formatAddress = (address: string) => {
-    if (!address) return ""
-    return `${address.slice(0, 6)}...${address.slice(-4)}`
+    if (!address) return "";
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
+  const getWillStatus = () => {
+    if (!userWillData) return { color: "text-gray-400", text: "No Will" };
+    if (userWillData.isClaimed)
+      return { color: "text-red-500", text: "Claimed" };
+
+    const now = Math.floor(Date.now() / 1000);
+    const lastPing = Number(userWillData.lastPingTime);
+    const waitTime = Number(userWillData.claimWaitTime);
+    const timeUntilClaimable = lastPing + waitTime - now;
+
+    if (timeUntilClaimable <= 0)
+      return { color: "text-red-500", text: "Claimable" };
+    if (timeUntilClaimable <= waitTime * 0.1)
+      return { color: "text-yellow-500", text: "Action Needed" };
+    return { color: "text-green-500", text: "Active" };
+  };
+
+  const formatTimeUntilClaimable = () => {
+    if (!userWillData) return "N/A";
+
+    const now = Math.floor(Date.now() / 1000);
+    const lastPing = Number(userWillData.lastPingTime);
+    const waitTime = Number(userWillData.claimWaitTime);
+    const timeUntilClaimable = lastPing + waitTime - now;
+
+    if (timeUntilClaimable <= 0) return "Claimable now";
+
+    const days = Math.floor(timeUntilClaimable / (24 * 60 * 60));
+    const hours = Math.floor((timeUntilClaimable % (24 * 60 * 60)) / (60 * 60));
+
+    if (days > 0) return `${days}d ${hours}h`;
+    return `${hours}h`;
+  };
+
+  if (!isConnected) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center text-white">
+          <Card className="w-full max-w-md bg-black/40 backdrop-blur-md border-white/20 shadow-xl rounded-2xl">
+            <CardHeader className="text-center">
+              <h3 className="text-lg font-semibold">Connect Wallet</h3>
+              <p className="text-gray-400">
+                Please connect your wallet to view dashboard
+              </p>
+            </CardHeader>
+            <CardContent className="p-4 flex justify-center">
+              <Button
+                onClick={connectWallet}
+                disabled={walletLoading}
+                className="bg-amber-500 hover:bg-amber-600 text-black font-bold py-2 px-4 rounded transition-colors"
+              >
+                {walletLoading ? "Connecting..." : "Connect Wallet"}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
   }
 
-  const formatTime = (timestamp: number) => {
-    const now = Date.now()
-    const diff = now - timestamp
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-    const hours = Math.floor(diff / (1000 * 60 * 60))
-
-    if (days > 0) return `${days}d ago`
-    if (hours > 0) return `${hours}h ago`
-    return "Just now"
-  }
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-  }
+  const willStatus = getWillStatus();
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex">
-      {/* Sidebar */}
-      <div className="w-64 bg-[#0a0a0a] border-r border-gray-800 p-4">
-        <div className="flex items-center space-x-3 mb-8">
-          <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-600 rounded-lg flex items-center justify-center">
-            <Zap className="w-5 h-5 text-white" />
+    <DashboardLayout>
+      <div className="min-h-screen text-white p-6">
+        {/* Error Display */}
+        {walletError && (
+          <div className="mb-6">
+            <Card className="bg-red-900/20 border-red-500/50">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400" />
+                  <span className="text-red-400">{walletError}</span>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-          <h1 className="text-xl font-bold">Axienz</h1>
-        </div>
+        )}
 
-        <nav className="space-y-2">
-          <NavItem icon={BarChart3} label="Dashboard" active />
-          <NavItem icon={FileText} label="Create Will" />
-          <NavItem icon={Users} label="Claim Will" />
-          <NavItem icon={Activity} label="Ping Will" />
-        </nav>
-
-        
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-          {/* BNB Wallet Card */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-            <Card className="bg-gradient-to-br from-orange-500 to-red-600 border-0 text-white relative overflow-hidden">
+        {/* Header Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+          {/* Wallet Balance */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+            <Card className="bg-gradient-to-br from-amber-500 to-orange-600 border-0 text-white relative overflow-hidden shadow-xl shadow-amber-500/20">
               <div className="absolute top-2 right-2">
                 <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
                   <div className="w-2 h-2 bg-white rounded-full"></div>
@@ -141,92 +264,63 @@ export default function DashboardPage() {
               <CardHeader className="pb-2">
                 <div className="flex items-center space-x-2">
                   <Wallet className="w-5 h-5" />
-                  <span className="text-sm font-medium opacity-90">BNB WALLET</span>
+                  <span className="text-sm font-medium opacity-90">
+                    WALLET BALANCE
+                  </span>
                 </div>
                 <div className="text-xs opacity-70">BNB NETWORK</div>
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="space-y-2">
-                  <div className="text-2xl font-bold">{balance} BNB</div>
-                  <div className="text-sm opacity-80">0</div>
-                  <div className="text-xs opacity-70">CARDHOLDER</div>
-                  <div className="text-xs font-mono opacity-80">{formatAddress(account)}</div>
-                  <div className="text-xs opacity-60">@binance</div>
-                  <div className="flex justify-between items-center mt-4">
-                    <div className="text-xs opacity-70">{formatAddress("0xdce5...e52e")}</div>
-                    <div className="text-right">
-                      <div className="text-xs opacity-70">9/8</div>
-                      <div className="text-xs opacity-70">CVC</div>
-                    </div>
+                  <div className="text-2xl font-bold">{formatBNB(balance)}</div>
+                  <div className="text-sm opacity-80">
+                    {formatUSD(balanceUSD)}
+                  </div>
+                  <div className="text-xs opacity-70">ACCOUNT</div>
+                  <div className="text-xs font-mono opacity-80">
+                    {formatAddress(account)}
                   </div>
                 </div>
               </CardContent>
             </Card>
           </motion.div>
 
-          {/* Asset Distribution */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-            <Card className="bg-gray-900 border-gray-800">
+          {/* Contract Balance */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
               <CardHeader className="pb-4">
-                <h3 className="text-white font-semibold">Asset Distribution</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-amber-400" />
+                    Contract TVL
+                  </h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={fetchWillData}
+                    disabled={loadingWillData}
+                    className="text-gray-400 hover:text-amber-400 p-1"
+                  >
+                    <RefreshCw
+                      className={`w-4 h-4 ${loadingWillData ? "animate-spin" : ""}`}
+                    />
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-center mb-6">
-                  <div className="relative w-32 h-32">
-                    <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 100 100">
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="35"
-                        stroke="currentColor"
-                        strokeWidth="8"
-                        fill="transparent"
-                        className="text-gray-700"
-                      />
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="35"
-                        stroke="currentColor"
-                        strokeWidth="8"
-                        fill="transparent"
-                        strokeDasharray={`${73 * 2.2} ${100 * 2.2}`}
-                        className="text-white"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-2xl font-bold text-white">73%</span>
-                      <span className="text-xs text-gray-400">Allocated</span>
-                    </div>
+                <div className="space-y-2">
+                  <div className="text-2xl font-bold text-amber-400">
+                    {formatBNB(contractBalance)}
                   </div>
-                </div>
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-white rounded-full"></div>
-                      <span className="text-gray-300">Digital Assets</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-white">45% • $3,780</div>
-                    </div>
+                  <div className="text-sm text-gray-300">
+                    {formatUSD(contractBalanceUSD)}
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
-                      <span className="text-gray-300">Smart Contracts</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-white">28% • $2,350</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-gray-600 rounded-full"></div>
-                      <span className="text-gray-300">Reserved</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-white">27% • $2,270</div>
-                    </div>
+                  <div className="text-xs text-gray-400">
+                    Total Value Locked
                   </div>
                 </div>
               </CardContent>
@@ -234,54 +328,79 @@ export default function DashboardPage() {
           </motion.div>
 
           {/* BNB Price */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-            <Card className="bg-gray-900 border-gray-800">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-white font-semibold">BNB Price</h3>
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    <DollarSign className="w-5 h-5 text-amber-400" />
+                    BNB Price
+                  </h3>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={fetchBNBPrice}
                     disabled={loadingPrice}
-                    className="text-gray-400 hover:text-white p-1"
+                    className="text-gray-400 hover:text-amber-400 p-1"
                   >
-                    <RefreshCw className={`w-4 h-4 ${loadingPrice ? "animate-spin" : ""}`} />
+                    <RefreshCw
+                      className={`w-4 h-4 ${loadingPrice ? "animate-spin" : ""}`}
+                    />
                   </Button>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Badge className="bg-green-500/20 text-green-400 border-green-500/30">7d: +15.85%</Badge>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <div className="text-3xl font-bold text-white mb-1">${bnbPrice?.price.toFixed(2) || "5.15"}</div>
-                    <div className="flex justify-between text-sm text-gray-400">
-                      <span>24h High: ${bnbPrice ? (bnbPrice.price * 1.02).toFixed(2) : "5.16"}</span>
-                      <span>24h Low: ${bnbPrice ? (bnbPrice.price * 0.98).toFixed(2) : "4.81"}</span>
-                    </div>
+                <div className="space-y-2">
+                  <div className="text-2xl font-bold text-white">
+                    ${bnbPrice?.price.toFixed(2) || "---"}
                   </div>
-
-                  <div className="text-right text-sm text-gray-400 space-y-1">
-                    <div>Market Cap: $3.39B</div>
-                    <div>Volume: $293.0M</div>
-                    <div>Last updated: 10:37:44</div>
+                  <div className="flex items-center space-x-2">
+                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                      Live
+                    </Badge>
                   </div>
+                  <div className="text-xs text-gray-400">
+                    Updated:{" "}
+                    {bnbPrice
+                      ? new Date(bnbPrice.timestamp).toLocaleTimeString()
+                      : "Never"}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
-                  {/* Simple Chart Representation */}
-                  <div className="h-16 bg-gray-800 rounded flex items-end justify-center p-2">
-                    <div className="flex items-end space-x-1 h-full">
-                      {Array.from({ length: 20 }, (_, i) => (
-                        <div
-                          key={i}
-                          className="bg-gray-600 w-2 rounded-t"
-                          style={{
-                            height: `${Math.random() * 80 + 20}%`,
-                          }}
-                        />
-                      ))}
-                    </div>
+          {/* Will Status */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+          >
+            <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
+              <CardHeader className="pb-4">
+                <h3 className="text-white font-semibold flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-amber-400" />
+                  Will Status
+                </h3>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className={`text-2xl font-bold ${willStatus.color}`}>
+                    {willStatus.text}
+                  </div>
+                  <div className="text-sm text-gray-300">
+                    {userWillData
+                      ? formatTimeUntilClaimable()
+                      : "No will created"}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {userWillData
+                      ? `Created ${new Date(Number(userWillData.creationTime) * 1000).toLocaleDateString()}`
+                      : "Create your first will"}
                   </div>
                 </div>
               </CardContent>
@@ -289,142 +408,242 @@ export default function DashboardPage() {
           </motion.div>
         </div>
 
-        {/* Bottom Section */}
+        {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Recent Activity */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-            <Card className="bg-gray-900 border-gray-800">
+          {/* Your Will Information */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
               <CardHeader className="pb-4">
-                <div className="flex items-center space-x-2">
-                  <Activity className="w-5 h-5 text-gray-400" />
-                  <h3 className="text-white font-semibold">Recent Activity</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-amber-400" />
+                    Your Will
+                  </h3>
+                  {userWillData && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => (window.location.href = "/check-my-will")}
+                      className="text-gray-400 hover:text-amber-400 text-sm"
+                    >
+                      Manage →
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <ActivityRow
-                    icon={FileText}
-                    title="Will Creation"
-                    time="Dec 15, 2:30 PM"
-                    amount="-$0.01"
-                    status="Completed"
-                  />
-                  <ActivityRow
-                    icon={TrendingUp}
-                    title="Asset Distribution"
-                    time="Dec 12, 10:15 AM"
-                    amount="+$2,500.00"
-                    status="Executed"
-                    positive
-                  />
-                  <ActivityRow
-                    icon={Settings}
-                    title="Smart Contract Update"
-                    time="Dec 10, 4:45 PM"
-                    amount="-$0.01"
-                    status="Completed"
-                  />
-                  <ActivityRow
-                    icon={Shield}
-                    title="Legacy Verification"
-                    time="Dec 8, 9:20 AM"
-                    amount="-$0.01"
-                    status="Verified"
-                  />
-                </div>
+                {userWillData ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Amount Secured:</span>
+                      <div className="text-right">
+                        <div className="text-white font-semibold">
+                          {formatBNB(
+                            parseFloat(userWillData.amount?.toString() || "0") /
+                              1e18,
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-400">
+                          {formatUSD(userWillAmountUSD)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Beneficiary:</span>
+                      <span className="text-white font-mono text-sm">
+                        {formatAddress(userWillData.beneficiary)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Status:</span>
+                      <Badge
+                        className={
+                          willStatus.color === "text-green-500"
+                            ? "bg-green-500/20 text-green-400 border-green-500/30"
+                            : willStatus.color === "text-yellow-500"
+                              ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                              : "bg-red-500/20 text-red-400 border-red-500/30"
+                        }
+                      >
+                        {willStatus.text}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Last Activity:</span>
+                      <span className="text-white text-sm">
+                        {new Date(
+                          Number(userWillData.lastPingTime) * 1000,
+                        ).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-white/10">
+                      <Button
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-black font-medium transition-colors"
+                        onClick={() =>
+                          (window.location.href = "/check-my-will")
+                        }
+                      >
+                        Manage Will
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-400 mb-4">No will created yet</p>
+                    <p className="text-sm text-gray-500 mb-4">
+                      Secure your digital assets for your loved ones
+                    </p>
+                    <Button
+                      className="bg-amber-500 hover:bg-amber-600 text-black font-medium transition-colors"
+                      onClick={() => (window.location.href = "/create-will")}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create Your Will
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
 
-          {/* Additional Info */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
-            <Card className="bg-gray-900 border-gray-800">
+          {/* Claimable Assets */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+          >
+            <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
               <CardHeader className="pb-4">
-                <h3 className="text-white font-semibold">Quick Actions</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    <Users className="w-5 h-5 text-amber-400" />
+                    Claimable Assets
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
+                      {claimableWills.length}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={fetchClaimableWills}
+                      disabled={loadingClaimables}
+                      className="text-gray-400 hover:text-amber-400 p-1"
+                    >
+                      <RefreshCw
+                        className={`w-4 h-4 ${loadingClaimables ? "animate-spin" : ""}`}
+                      />
+                    </Button>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  <Button
-                    variant="outline"
-                    className="h-20 flex flex-col items-center justify-center space-y-2 bg-transparent"
-                  >
-                    <FileText className="w-6 h-6" />
-                    <span className="text-sm">Create Will</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-20 flex flex-col items-center justify-center space-y-2 bg-transparent"
-                  >
-                    <Users className="w-6 h-6" />
-                    <span className="text-sm">Claim Will</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-20 flex flex-col items-center justify-center space-y-2 bg-transparent"
-                  >
-                    <Activity className="w-6 h-6" />
-                    <span className="text-sm">Ping Will</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-20 flex flex-col items-center justify-center space-y-2 bg-transparent"
-                  >
-                    <Settings className="w-6 h-6" />
-                    <span className="text-sm">Settings</span>
-                  </Button>
-                </div>
+                {claimableWills.length > 0 ? (
+                  <div className="space-y-3 max-h-80 overflow-y-auto">
+                    {claimableWills.map((will, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10"
+                      >
+                        <div>
+                          <div className="text-sm text-white font-medium">
+                            From: {formatAddress(will.owner)}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            Inheritance available
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm text-amber-400 font-medium">
+                            {formatBNB(will.amount)}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            Click to claim
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="mt-4 pt-4 border-t border-white/10">
+                      <Button
+                        className="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors"
+                        onClick={() => (window.location.href = "/claimables")}
+                      >
+                        View All Claimables
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-400 mb-2">No claimable assets</p>
+                    <p className="text-sm text-gray-500">
+                      Assets you can inherit will appear here
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
         </div>
-      </div>
-    </div>
-  )
-}
 
-function NavItem({ icon: Icon, label, active = false }: { icon: any; label: string; active?: boolean }) {
-  return (
-    <div
-      className={`flex items-center space-x-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-        active ? "bg-gray-800 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800/50"
-      }`}
-    >
-      <Icon className="w-5 h-5" />
-      <span className="text-sm">{label}</span>
-    </div>
-  )
-}
-
-function ActivityRow({
-  icon: Icon,
-  title,
-  time,
-  amount,
-  status,
-  positive = false,
-}: {
-  icon: any
-  title: string
-  time: string
-  amount: string
-  status: string
-  positive?: boolean
-}) {
-  return (
-    <div className="flex items-center justify-between py-2">
-      <div className="flex items-center space-x-3">
-        <div className="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center">
-          <Icon className="w-4 h-4 text-gray-400" />
-        </div>
-        <div>
-          <div className="text-sm text-white">{title}</div>
-          <div className="text-xs text-gray-400">{time}</div>
-        </div>
+        {/* Quick Actions */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7 }}
+        >
+          <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl mt-6">
+            <CardHeader className="pb-4">
+              <h3 className="text-white font-semibold">Quick Actions</h3>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Button
+                  variant="outline"
+                  className="h-20 flex flex-col items-center justify-center space-y-2 bg-white/5 backdrop-blur border-white/20 hover:bg-white/10 hover:border-amber-400/50 transition-all"
+                  onClick={() => (window.location.href = "/create-will")}
+                >
+                  <FileText className="w-6 h-6 text-amber-400" />
+                  <span className="text-sm">Create Will</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-20 flex flex-col items-center justify-center space-y-2 bg-white/5 backdrop-blur border-white/20 hover:bg-white/10 hover:border-amber-400/50 transition-all"
+                  onClick={() => (window.location.href = "/check-my-will")}
+                >
+                  <Settings className="w-6 h-6 text-amber-400" />
+                  <span className="text-sm">Manage Will</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-20 flex flex-col items-center justify-center space-y-2 bg-white/5 backdrop-blur border-white/20 hover:bg-white/10 hover:border-amber-400/50 transition-all"
+                  onClick={() => (window.location.href = "/claimables")}
+                >
+                  <Users className="w-6 h-6 text-amber-400" />
+                  <span className="text-sm">Claim Assets</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-20 flex flex-col items-center justify-center space-y-2 bg-white/5 backdrop-blur border-white/20 hover:bg-white/10 hover:border-amber-400/50 transition-all"
+                  onClick={() => {
+                    fetchBNBPrice();
+                    fetchWillData();
+                    fetchClaimableWills();
+                  }}
+                >
+                  <RefreshCw className="w-6 h-6 text-amber-400" />
+                  <span className="text-sm">Refresh Data</span>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
-      <div className="text-right">
-        <div className={`text-sm ${positive ? "text-green-500" : "text-white"}`}>{amount}</div>
-        <div className="text-xs text-green-500">{status}</div>
-      </div>
-    </div>
-  )
+    </DashboardLayout>
+  );
 }

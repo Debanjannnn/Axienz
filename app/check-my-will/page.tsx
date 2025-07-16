@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { motion } from "framer-motion";
-import { DotBackground } from "@/components/animateddots";
 
 const Page = () => {
   const [hasSimpleWill, setHasSimpleWill] = useState(false);
@@ -22,24 +21,31 @@ const Page = () => {
   };
 
   return (
-    <DotBackground>
+    <DashboardLayout>
       <div className="flex items-center justify-center min-h-screen p-4">
-        <div className="w-full max-w-md text-center bg-transparent backdrop-blur-0 rounded-xl border p-6 shadow-lg">
-          {hasSimpleWill ? (
-            <div className="w-full bg-blue-500 ">
+        <Card className="w-full max-w-md bg-black/40 backdrop-blur-md border-white/20 rounded-xl p-6 shadow-xl">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-orange-500">
+              Check My Will
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {hasSimpleWill ? (
               <Button
                 onClick={handleRedirect}
-                className="w-full  bg-white/20 dark:bg-black/20 backdrop-blur-md border border-white/30 dark:border-gray-600/40 rounded-lg p-3 text-white dark:text-gray-300 hover:bg-white/30 dark:hover:bg-black/30 transition duration-300"
+                className="w-full bg-amber-500 hover:bg-amber-600 text-black font-bold py-3 px-6 rounded-lg transition-colors"
               >
                 Check Your Simple Will
               </Button>
-            </div>
-          ) : (
-            <p className="text-white">You do not have a Simple Will.</p>
-          )}
-        </div>
+            ) : (
+              <p className="text-gray-300 text-center">
+                You do not have a Simple Will.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </div>
-    </DotBackground>
+    </DashboardLayout>
   );
 };
 
