@@ -510,7 +510,13 @@ export default function DashboardPage() {
                           )}
                         </div>
                         <div className="text-sm text-gray-400">
-                          {/* Will calculate USD value */}
+                          {formatUSD(
+                            (parseFloat(
+                              userWillData.amount?.toString() || "0",
+                            ) /
+                              1e18) *
+                              (bnbPrice?.price || 0),
+                          )}
                         </div>
                       </div>
                     </div>
