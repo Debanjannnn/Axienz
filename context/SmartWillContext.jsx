@@ -9,7 +9,7 @@ const SmartWillContext = createContext();
 
 // BNB Chain Testnet Configuration
 const BNB_CHAIN_CONFIG = {
-  chainId: "0x61", // 656476 in hex
+  chainId: "0x61", // 97 in hex (BSC Testnet)
   chainName: "BNB Smart Chain Testnet",
   nativeCurrency: {
     name: "Test BNB",
@@ -22,7 +22,7 @@ const BNB_CHAIN_CONFIG = {
 
 export function SmartWillProvider({ children }) {
   const [account, setAccount] = useState(null);
-  const [balance, setBalance] = useState(0);
+  const [balance, setBalance] = useState("0");
   const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -36,11 +36,45 @@ export function SmartWillProvider({ children }) {
         // Refresh the page when chain changes to prevent any state inconsistencies
         window.location.reload();
       });
+
+      // Listen for account changes
+      window.ethereum.on("accountsChanged", (accounts) => {
+        if (accounts.length === 0) {
+          // User disconnected
+          setAccount(null);
+          setIsConnected(false);
+          setBalance("0");
+        } else {
+          // User switched accounts
+          setAccount(accounts[0]);
+          updateBalance(accounts[0]);
+        }
+      });
     }
+
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeAllListeners("chainChanged");
+        window.ethereum.removeAllListeners("accountsChanged");
+      }
+    };
   }, []);
 
+  // Update balance
+  const updateBalance = async (address) => {
+    try {
+      if (window.ethereum && address) {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const balance = await provider.getBalance(address);
+        setBalance(ethers.formatEther(balance));
+      }
+    } catch (error) {
+      console.error("Error updating balance:", error);
+    }
+  };
+
   // Switch to BNB Chain Testnet
-  async function switchToEDUChain() {
+  async function switchToBNBChain() {
     if (!window.ethereum) return false;
 
     try {
@@ -79,25 +113,27 @@ export function SmartWillProvider({ children }) {
         setError(null);
 
         // First, try to switch to BNB Chain
-        const switched = await switchToEDUChain();
+        const switched = await switchToBNBChain();
         if (!switched) {
           throw new Error("Failed to switch to BNB Chain");
         }
 
-        const providerInstance = new ethers.BrowserProvider(window.ethereum);
+        const provider = new ethers.BrowserProvider(window.ethereum);
 
         // Get accounts and chain ID
         const [accounts, network] = await Promise.all([
-          providerInstance.send("eth_requestAccounts", []),
-          providerInstance.getNetwork(),
+          provider.send("eth_requestAccounts", []),
+          provider.getNetwork(),
         ]);
 
         // Verify we're on the correct network
-        if (network.chainId !== BigInt(BNB_CHAIN_CONFIG.chainId)) {
+        if (
+          network.chainId !== BigInt(parseInt(BNB_CHAIN_CONFIG.chainId, 16))
+        ) {
           throw new Error("Please switch to BNB Chain Testnet");
         }
 
-        const balance = await providerInstance.getBalance(accounts[0]);
+        const balance = await provider.getBalance(accounts[0]);
 
         setAccount(accounts[0]);
         setBalance(ethers.formatEther(balance));
@@ -118,7 +154,7 @@ export function SmartWillProvider({ children }) {
     }
   }
 
-  // Create normal will
+  // Create normal will - matches ABI: createNormalWill(address payable _beneficiary, string _description, uint256 _claimWaitTime)
   async function createNormalWill(
     beneficiary,
     description,
@@ -136,7 +172,7 @@ export function SmartWillProvider({ children }) {
 
       // Verify network before proceeding
       if (chainId !== BNB_CHAIN_CONFIG.chainId) {
-        await switchToEDUChain();
+        await switchToBNBChain();
       }
 
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -161,6 +197,10 @@ export function SmartWillProvider({ children }) {
       }
 
       await tx.wait();
+
+      // Update balance after transaction
+      await updateBalance(account);
+
       return true;
     } catch (error) {
       console.error("Error creating normal will:", error);
@@ -171,66 +211,57 @@ export function SmartWillProvider({ children }) {
     }
   }
 
-  // Get normal will by owner address
+  // Get normal will by owner address - matches ABI: normalWills(address)
   async function getNormalWill(ownerAddress) {
     try {
-      setLoading(true);
-      setError(null);
-
-      if (!account) {
-        throw new Error("Please connect your wallet first");
-      }
-
-      // Verify network before proceeding
-      if (chainId !== BNB_CHAIN_CONFIG.chainId) {
-        await switchToEDUChain();
+      if (!ownerAddress) {
+        throw new Error("Owner address is required");
       }
 
       const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
       const contract = new ethers.Contract(
         CONTRACT_ADDRESS,
         CONTRACT_ABI,
-        signer,
+        provider,
       );
 
       const will = await contract.normalWills(ownerAddress);
-      return will;
+      return {
+        beneficiary: will.beneficiary,
+        amount: will.amount,
+        lastPingTime: will.lastPingTime,
+        claimWaitTime: will.claimWaitTime,
+        creationTime: will.creationTime,
+        description: will.description,
+        isClaimed: will.isClaimed,
+      };
     } catch (error) {
       console.error("Error fetching normal will:", error);
-      setError("Error fetching will details. Please try again.");
-      return null;
-    } finally {
-      setLoading(false);
+      throw new Error("Error fetching will details. Please try again.");
     }
   }
 
-  // Check if address has created a will
-  async function hasCreatedWill() {
+  // Check if address has created a will - matches ABI: hasNormalWill(address)
+  async function hasCreatedWill(address) {
     try {
-      if (!account) return false;
-
-      // Verify network before proceeding
-      if (chainId !== BNB_CHAIN_CONFIG.chainId) {
-        await switchToEDUChain();
-      }
+      const targetAddress = address || account;
+      if (!targetAddress) return false;
 
       const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
       const contract = new ethers.Contract(
         CONTRACT_ADDRESS,
         CONTRACT_ABI,
-        signer,
+        provider,
       );
 
-      return await contract.hasNormalWill(account);
+      return await contract.hasNormalWill(targetAddress);
     } catch (error) {
       console.error("Error checking will existence:", error);
       return false;
     }
   }
 
-  // Ping the contract to show activity
+  // Ping the contract to show activity - matches ABI: ping()
   async function ping() {
     try {
       setLoading(true);
@@ -242,7 +273,7 @@ export function SmartWillProvider({ children }) {
 
       // Verify network before proceeding
       if (chainId !== BNB_CHAIN_CONFIG.chainId) {
-        await switchToEDUChain();
+        await switchToBNBChain();
       }
 
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -255,17 +286,23 @@ export function SmartWillProvider({ children }) {
 
       const tx = await contract.ping();
       await tx.wait();
+
+      // Update balance after transaction
+      await updateBalance(account);
+
       return true;
     } catch (error) {
       console.error("Error pinging contract:", error);
-      setError("Error updating activity status. Please try again.");
+      setError(
+        error.message || "Error updating activity status. Please try again.",
+      );
       return false;
     } finally {
       setLoading(false);
     }
   }
 
-  // Deposit more to existing will
+  // Deposit more to existing will - matches ABI: deposit()
   async function depositNormalWill(amount) {
     try {
       setLoading(true);
@@ -277,7 +314,7 @@ export function SmartWillProvider({ children }) {
 
       // Verify network before proceeding
       if (chainId !== BNB_CHAIN_CONFIG.chainId) {
-        await switchToEDUChain();
+        await switchToBNBChain();
       }
 
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -291,18 +328,22 @@ export function SmartWillProvider({ children }) {
       const amountInWei = ethers.parseEther(amount.toString());
       const tx = await contract.deposit({ value: amountInWei });
       await tx.wait();
+
+      // Update balance after transaction
+      await updateBalance(account);
+
       return true;
     } catch (error) {
       console.error("Error depositing to will:", error);
-      setError("Error making deposit. Please try again.");
+      setError(error.message || "Error making deposit. Please try again.");
       return false;
     } finally {
       setLoading(false);
     }
   }
 
-  // Get wills where the connected account is a beneficiary
-  async function getNormalWillsAsBeneficiary() {
+  // Withdraw from normal will - matches ABI: withdrawNormalWill(uint256 amount)
+  async function withdrawNormalWill(amount) {
     try {
       setLoading(true);
       setError(null);
@@ -313,7 +354,7 @@ export function SmartWillProvider({ children }) {
 
       // Verify network before proceeding
       if (chainId !== BNB_CHAIN_CONFIG.chainId) {
-        await switchToEDUChain();
+        await switchToBNBChain();
       }
 
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -324,9 +365,44 @@ export function SmartWillProvider({ children }) {
         signer,
       );
 
+      const amountInWei = ethers.parseEther(amount.toString());
+      const tx = await contract.withdrawNormalWill(amountInWei);
+      await tx.wait();
+
+      // Update balance after transaction
+      await updateBalance(account);
+
+      return true;
+    } catch (error) {
+      console.error("Error withdrawing from will:", error);
+      setError(
+        error.message || "Error withdrawing from will. Please try again.",
+      );
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Get wills where the connected account is a beneficiary - matches ABI: getNormalWillAsBeneficiary(address)
+  async function getNormalWillsAsBeneficiary(beneficiaryAddress) {
+    try {
+      const targetAddress = beneficiaryAddress || account;
+      if (!targetAddress) {
+        throw new Error("Please connect your wallet first");
+      }
+
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI,
+        provider,
+      );
+
       const [owners, amounts] =
-        await contract.getNormalWillAsBeneficiary(account);
-      console.log("OWNERS: ", owners, " \n", "BENEFICARIES: ", amounts);
+        await contract.getNormalWillAsBeneficiary(targetAddress);
+      console.log("OWNERS: ", owners, " \n", "AMOUNTS: ", amounts);
+
       return owners.map((owner, index) => ({
         owner,
         amount: ethers.formatEther(amounts[index]),
@@ -335,36 +411,26 @@ export function SmartWillProvider({ children }) {
       console.error("Error fetching beneficiary wills:", error);
       setError("Error fetching will details. Please try again.");
       return [];
-    } finally {
-      setLoading(false);
     }
   }
 
-  // Get milestone wills where the connected account is a beneficiary
-  async function getMilestoneWillsAsBeneficiary() {
+  // Get milestone wills where the connected account is a beneficiary - matches ABI: getMilestoneWillsAsBeneficiary(address)
+  async function getMilestoneWillsAsBeneficiary(beneficiaryAddress) {
     try {
-      setLoading(true);
-      setError(null);
-
-      if (!account) {
+      const targetAddress = beneficiaryAddress || account;
+      if (!targetAddress) {
         throw new Error("Please connect your wallet first");
       }
 
-      // Verify network before proceeding
-      if (chainId !== BNB_CHAIN_CONFIG.chainId) {
-        await switchToEDUChain();
-      }
-
       const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
       const contract = new ethers.Contract(
         CONTRACT_ADDRESS,
         CONTRACT_ABI,
-        signer,
+        provider,
       );
 
       const [owners, willIndexes, releaseIndexes, releaseAmounts] =
-        await contract.getMilestoneWillsAsBeneficiary(account);
+        await contract.getMilestoneWillsAsBeneficiary(targetAddress);
 
       return owners.map((owner, index) => ({
         owner,
@@ -376,12 +442,10 @@ export function SmartWillProvider({ children }) {
       console.error("Error fetching milestone wills:", error);
       setError("Error fetching milestone will details. Please try again.");
       return [];
-    } finally {
-      setLoading(false);
     }
   }
 
-  // Claim a normal will as a beneficiary
+  // Claim a normal will as a beneficiary - matches ABI: claimNormalWill(address _owner)
   async function claimNormalWill(ownerAddress) {
     try {
       setLoading(true);
@@ -393,7 +457,7 @@ export function SmartWillProvider({ children }) {
 
       // Verify network before proceeding
       if (chainId !== BNB_CHAIN_CONFIG.chainId) {
-        await switchToEDUChain();
+        await switchToBNBChain();
       }
 
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -406,6 +470,10 @@ export function SmartWillProvider({ children }) {
 
       const tx = await contract.claimNormalWill(ownerAddress);
       await tx.wait();
+
+      // Update balance after transaction
+      await updateBalance(account);
+
       return true;
     } catch (error) {
       console.error("Error claiming will:", error);
@@ -416,7 +484,7 @@ export function SmartWillProvider({ children }) {
     }
   }
 
-  // Claim a milestone will as a beneficiary
+  // Claim a milestone will as a beneficiary - matches ABI: claimMilestoneWill(address _owner, uint256 willIndex, uint256 releaseIndex)
   async function claimMilestoneWill(ownerAddress, willIndex, releaseIndex) {
     try {
       setLoading(true);
@@ -428,7 +496,7 @@ export function SmartWillProvider({ children }) {
 
       // Verify network before proceeding
       if (chainId !== BNB_CHAIN_CONFIG.chainId) {
-        await switchToEDUChain();
+        await switchToBNBChain();
       }
 
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -445,6 +513,10 @@ export function SmartWillProvider({ children }) {
         releaseIndex,
       );
       await tx.wait();
+
+      // Update balance after transaction
+      await updateBalance(account);
+
       return true;
     } catch (error) {
       console.error("Error claiming milestone will:", error);
@@ -457,128 +529,11 @@ export function SmartWillProvider({ children }) {
     }
   }
 
-  // Get user activity
-  async function getUserActivity(userAddress, offset = 0, limit = 10) {
-    try {
-      const targetAddress = userAddress || account;
-      if (!targetAddress) {
-        throw new Error("No address provided");
-      }
-
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const contract = new ethers.Contract(
-        CONTRACT_ADDRESS,
-        CONTRACT_ABI,
-        provider,
-      );
-
-      const result = await contract.getUserActivity(
-        targetAddress,
-        offset,
-        limit,
-      );
-
-      return {
-        activities: result[0].map((activity) => ({
-          timestamp: Number(activity.timestamp),
-          activityType: activity.activityType,
-          amount: activity.amount.toString(),
-          relatedAddress: activity.relatedAddress,
-          description: activity.description,
-        })),
-        totalActivities: Number(result[1]),
-        lastActivityTime: Number(result[2]),
-        hasMore: result[3],
-      };
-    } catch (error) {
-      console.error("Error fetching user activity:", error);
-      return {
-        activities: [],
-        totalActivities: 0,
-        lastActivityTime: 0,
-        hasMore: false,
-      };
-    }
-  }
-
-  // Get user activity summary
-  async function getUserActivitySummary(userAddress) {
-    try {
-      const targetAddress = userAddress || account;
-      if (!targetAddress) {
-        throw new Error("No address provided");
-      }
-
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const contract = new ethers.Contract(
-        CONTRACT_ADDRESS,
-        CONTRACT_ABI,
-        provider,
-      );
-
-      const result = await contract.getUserActivitySummary(targetAddress);
-
-      return {
-        totalActivities: Number(result[0]),
-        lastActivityTime: Number(result[1]),
-        hasActivity: result[2],
-        lastActivityType: result[3],
-      };
-    } catch (error) {
-      console.error("Error fetching activity summary:", error);
-      return {
-        totalActivities: 0,
-        lastActivityTime: 0,
-        hasActivity: false,
-        lastActivityType: "",
-      };
-    }
-  }
-
-  // Get activities by type
-  async function getUserActivitiesByType(activityType, userAddress) {
-    try {
-      const targetAddress = userAddress || account;
-      if (!targetAddress) {
-        throw new Error("No address provided");
-      }
-
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const contract = new ethers.Contract(
-        CONTRACT_ADDRESS,
-        CONTRACT_ABI,
-        provider,
-      );
-
-      const activities = await contract.getUserActivitiesByType(
-        targetAddress,
-        activityType,
-      );
-
-      return activities.map((activity) => ({
-        timestamp: Number(activity.timestamp),
-        activityType: activity.activityType,
-        amount: activity.amount.toString(),
-        relatedAddress: activity.relatedAddress,
-        description: activity.description,
-      }));
-    } catch (error) {
-      console.error("Error fetching activities by type:", error);
-      return [];
-    }
-  }
-
-  // Get contract balance
+  // Get contract balance by reading all wills (helper function)
   async function getContractBalance() {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
-      const contract = new ethers.Contract(
-        CONTRACT_ADDRESS,
-        CONTRACT_ABI,
-        provider,
-      );
-
-      const balance = await contract.getBalance();
+      const balance = await provider.getBalance(CONTRACT_ADDRESS);
       return ethers.formatEther(balance);
     } catch (error) {
       console.error("Error fetching contract balance:", error);
@@ -586,8 +541,49 @@ export function SmartWillProvider({ children }) {
     }
   }
 
-  // Withdraw from normal will (1 year cooldown)
-  async function withdrawNormalWill(amount) {
+  // Get platform fee percentage - matches ABI: platformFeePercentage()
+  async function getPlatformFeePercentage() {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI,
+        provider,
+      );
+
+      const feePercentage = await contract.platformFeePercentage();
+      return Number(feePercentage);
+    } catch (error) {
+      console.error("Error fetching platform fee:", error);
+      return 0;
+    }
+  }
+
+  // Get platform wallet - matches ABI: platformWallet()
+  async function getPlatformWallet() {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI,
+        provider,
+      );
+
+      return await contract.platformWallet();
+    } catch (error) {
+      console.error("Error fetching platform wallet:", error);
+      return null;
+    }
+  }
+
+  // Create milestone will - matches ABI: createMilestoneWill(address[] _beneficiaries, uint256[] _releaseTimes, uint256[] _releasePercentages, string[] _descriptions)
+  async function createMilestoneWill(
+    beneficiaries,
+    releaseTimes,
+    releasePercentages,
+    descriptions,
+    totalAmount,
+  ) {
     try {
       setLoading(true);
       setError(null);
@@ -598,7 +594,7 @@ export function SmartWillProvider({ children }) {
 
       // Verify network before proceeding
       if (chainId !== BNB_CHAIN_CONFIG.chainId) {
-        await switchToEDUChain();
+        await switchToBNBChain();
       }
 
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -609,15 +605,62 @@ export function SmartWillProvider({ children }) {
         signer,
       );
 
-      const amountInWei = ethers.parseEther(amount.toString());
-      const tx = await contract.withdraw(amountInWei);
+      const value = ethers.parseEther(totalAmount.toString());
+      const tx = await contract.createMilestoneWill(
+        beneficiaries,
+        releaseTimes,
+        releasePercentages,
+        descriptions,
+        { value },
+      );
+
       await tx.wait();
+
+      // Update balance after transaction
+      await updateBalance(account);
+
       return true;
     } catch (error) {
-      console.error("Error withdrawing from will:", error);
+      console.error("Error creating milestone will:", error);
       setError(
-        error.message || "Error withdrawing from will. Please try again.",
+        error.message || "Error creating milestone will. Please try again.",
       );
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Update recipient - matches ABI: updateRecipient(address newRecipient)
+  async function updateRecipient(newRecipient) {
+    try {
+      setLoading(true);
+      setError(null);
+
+      if (!account) {
+        throw new Error("Please connect your wallet first");
+      }
+
+      // Verify network before proceeding
+      if (chainId !== BNB_CHAIN_CONFIG.chainId) {
+        await switchToBNBChain();
+      }
+
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI,
+        signer,
+      );
+
+      const tx = await contract.updateRecipient(newRecipient);
+      await tx.wait();
+
+      return true;
+    } catch (error) {
+      console.error("Error updating recipient:", error);
+      setError(error.message || "Error updating recipient. Please try again.");
       return false;
     } finally {
       setLoading(false);
@@ -638,15 +681,16 @@ export function SmartWillProvider({ children }) {
     ping,
     depositNormalWill,
     withdrawNormalWill,
-    switchToEDUChain,
+    switchToBNBChain,
     getNormalWillsAsBeneficiary,
     getMilestoneWillsAsBeneficiary,
     claimNormalWill,
     claimMilestoneWill,
-    getUserActivity,
-    getUserActivitySummary,
-    getUserActivitiesByType,
     getContractBalance,
+    getPlatformFeePercentage,
+    getPlatformWallet,
+    createMilestoneWill,
+    updateRecipient,
   };
 
   return (
