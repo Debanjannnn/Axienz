@@ -37,21 +37,30 @@ const CreateWill = () => {
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] text-white py-16 px-4 relative overflow-hidden">
-        {/* Background Gradient Overlay - subtle animation */}
-        <motion.div
-          className="absolute inset-0 bg-gradient-to-r from-blue-900 via-purple-900 to-gray-900 opacity-30 mix-blend-multiply pointer-events-none"
-          animate={{
-            x: ["-100%", "100%"],
-            y: ["-50%", "50%"],
-            rotate: [0, 360],
-          }}
-          transition={{
-            duration: 120,
-            repeat: Infinity,
-            ease: "linear",
-          }}
-        />
+      <div className="min-h-screen flex flex-col items-center justify-center text-white py-16 px-4 relative">
+        {/* Floating particles background effect */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {[...Array(15)].map((_, i) => (
+            <motion.div
+              key={i}
+              className="absolute w-1 h-1 bg-amber-500/20 rounded-full"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+              }}
+              animate={{
+                y: [0, -30, 0],
+                opacity: [0.1, 0.6, 0.1],
+                scale: [1, 1.5, 1],
+              }}
+              transition={{
+                duration: 4 + Math.random() * 2,
+                repeat: Number.POSITIVE_INFINITY,
+                delay: Math.random() * 2,
+              }}
+            />
+          ))}
+        </div>
 
         <motion.div
           className="text-center mb-12 relative z-10"
@@ -59,7 +68,7 @@ const CreateWill = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2 }}
         >
-          <h1 className="text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+          <h1 className="text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-orange-500">
             Secure Your Legacy
           </h1>
           <p className="text-xl text-gray-300 max-w-2xl mx-auto">
@@ -77,13 +86,13 @@ const CreateWill = () => {
             whileHover="hover"
             className="transition-transform duration-300" // Subtle card hover effect
           >
-            <Card className="bg-gray-800/50 backdrop-blur border border-gray-700/50 rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-shadow duration-300">
+            <Card className="bg-black/40 backdrop-blur-md border border-white/20 rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-shadow duration-300">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-2xl font-bold flex items-center">
-                    <Shield className="mr-3 text-blue-400" /> Standard Will
+                    <Shield className="mr-3 text-amber-400" /> Standard Will
                   </CardTitle>
-                  <span className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-full text-sm">
+                  <span className="px-3 py-1 bg-amber-500/20 text-amber-300 rounded-full text-sm">
                     Most Popular
                   </span>
                 </div>
@@ -100,7 +109,7 @@ const CreateWill = () => {
                     initial="hidden"
                     animate="visible"
                   >
-                    <FileSignature className="mr-3 mt-1 text-green-400 flex-shrink-0" />
+                    <FileSignature className="mr-3 mt-1 text-amber-400 flex-shrink-0" />
                     <span>
                       Immutable Will: Assignments cannot be altered after
                       creation, ensuring the testator&apos;s intent is
@@ -114,7 +123,7 @@ const CreateWill = () => {
                     animate="visible"
                     transition={{ delay: 0.2 }}
                   >
-                    <Clock className="mr-3 mt-1 text-green-400 flex-shrink-0" />
+                    <Clock className="mr-3 mt-1 text-amber-400 flex-shrink-0" />
                     <span>
                       Automated Time Locks: The inheritance is automatically
                       locked after 10 years of inactivity, resettable with the
@@ -128,7 +137,7 @@ const CreateWill = () => {
                     animate="visible"
                     transition={{ delay: 0.4 }}
                   >
-                    <Gift className="mr-3 mt-1 text-green-400 flex-shrink-0" />
+                    <Gift className="mr-3 mt-1 text-amber-400 flex-shrink-0" />
                     <span>
                       Financial Safeguards: Assets are held in audited smart
                       contracts until conditions are met. Plus a 1-year
@@ -155,13 +164,13 @@ const CreateWill = () => {
             whileHover="hover"
             className="transition-transform duration-300"
           >
-            <Card className="bg-gray-800/50 backdrop-blur border border-gray-700/50 rounded-2xl p-6 shadow-xl">
+            <Card className="bg-black/40 backdrop-blur-md border border-white/20 rounded-2xl p-6 shadow-xl">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-2xl font-bold flex items-center">
-                    <Users className="mr-3 text-purple-400" /> Milestone Will
+                    <Users className="mr-3 text-orange-400" /> Milestone Will
                   </CardTitle>
-                  <span className="px-3 py-1 bg-purple-500/20 text-purple-300 rounded-full text-sm">
+                  <span className="px-3 py-1 bg-orange-500/20 text-orange-300 rounded-full text-sm">
                     Coming Soon
                   </span>
                 </div>
@@ -178,7 +187,7 @@ const CreateWill = () => {
                     initial="hidden"
                     animate="visible"
                   >
-                    <Gift className="mr-3 mt-1 text-purple-400 flex-shrink-0" />
+                    <Gift className="mr-3 mt-1 text-orange-400 flex-shrink-0" />
                     <span>
                       Smart Distribution: Configure multiple beneficiaries with
                       custom allocation rules and conditions.
@@ -191,7 +200,7 @@ const CreateWill = () => {
                     animate="visible"
                     transition={{ delay: 0.2 }}
                   >
-                    <Clock className="mr-3 mt-1 text-purple-400 flex-shrink-0" />
+                    <Clock className="mr-3 mt-1 text-orange-400 flex-shrink-0" />
                     <span>
                       Time-Based Vesting: Create sophisticated distribution
                       schedules based on time or specific events.
@@ -204,7 +213,7 @@ const CreateWill = () => {
                     animate="visible"
                     transition={{ delay: 0.4 }}
                   >
-                    <Shield className="mr-3 mt-1 text-purple-400 flex-shrink-0" />
+                    <Shield className="mr-3 mt-1 text-orange-400 flex-shrink-0" />
                     <span>
                       Enterprise-Grade Security: Immutable beneficiaries & claim
                       validation.
