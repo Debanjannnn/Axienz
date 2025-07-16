@@ -222,7 +222,7 @@ export default function FooterGlow() {
         <span>
           © 2025{" "}
           <Link href="#" className="hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
-            EDU LEGACY™
+            BNB LEGACY™
           </Link>
           . All Rights Reserved.
         </span>

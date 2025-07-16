@@ -255,7 +255,7 @@ const CheckMyWill = () => {
                   <InfoCard
                     icon={Coins}
                     title="Amount Secured"
-                    content={`${Number(willDetails.amount) / 1e18} EDU`}
+                    content={`${Number(willDetails.amount) / 1e18} BNB`}
                   />
                   <InfoCard
                     icon={Calendar}
@@ -300,7 +300,7 @@ const CheckMyWill = () => {
                           type="number"
                           step="0.000000000000000001"
                           min="0"
-                          placeholder="Amount in EDU"
+                          placeholder="Amount in BNB"
                           value={depositAmount}
                           onChange={(e) => setDepositAmount(e.target.value)}
                           className="flex-grow"

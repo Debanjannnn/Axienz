@@ -197,7 +197,7 @@ export default function Claimables() {
                       </CardDescription>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-lg">{claimable.amount} EDU</div>
+                      <div className="font-bold text-lg">{claimable.amount} BNB</div>
                       <CardDescription className="text-gray-400">Token Amount</CardDescription>
                     </div>
                   </div>

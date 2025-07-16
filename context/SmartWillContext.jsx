@@ -7,17 +7,17 @@ import CONTRACT_ABI from "@/abi"
 
 const SmartWillContext = createContext()
 
-// EDU Chain Testnet Configuration
-const EDU_CHAIN_CONFIG = {
-  chainId: "0xa045c", // 656476 in hex
-  chainName: "EDU Chain Testnet",
+// BNB Chain Testnet Configuration
+const BNB_CHAIN_CONFIG = {
+  chainId: "0x61", // 656476 in hex
+  chainName: "BNB Smart Chain Testnet",
   nativeCurrency: {
-    name: "EDU",
-    symbol: "EDU",
+    name: "Test BNB",
+    symbol: "tBNB",
     decimals: 18,
   },
-  rpcUrls: ["wss://open-campus-codex-sepolia.drpc.org"],
-  blockExplorerUrls: ["https://edu-chain-testnet.blockscout.com/"],
+  rpcUrls: ["https://bsc-testnet-rpc.publicnode.com"],
+  blockExplorerUrls: ["https://testnet.bscscan.com/"],
 }
 
 export function SmartWillProvider({ children }) {
@@ -39,15 +39,15 @@ export function SmartWillProvider({ children }) {
     }
   }, [])
 
-  // Switch to EDU Chain Testnet
+  // Switch to BNB Chain Testnet
   async function switchToEDUChain() {
     if (!window.ethereum) return false
 
     try {
-      // Try to switch to the EDU Chain
+      // Try to switch to the BNB Chain
       await window.ethereum.request({
         method: "wallet_switchEthereumChain",
-        params: [{ chainId: EDU_CHAIN_CONFIG.chainId }],
+        params: [{ chainId: BNB_CHAIN_CONFIG.chainId }],
       })
       return true
     } catch (switchError) {
@@ -56,17 +56,17 @@ export function SmartWillProvider({ children }) {
         try {
           await window.ethereum.request({
             method: "wallet_addEthereumChain",
-            params: [EDU_CHAIN_CONFIG],
+            params: [BNB_CHAIN_CONFIG],
           })
           return true
         } catch (addError) {
-          console.error("Error adding EDU Chain:", addError)
-          setError("Failed to add EDU Chain to MetaMask. Please try again.")
+          console.error("Error adding BNB Chain:", addError)
+          setError("Failed to add BNB Chain to MetaMask. Please try again.")
           return false
         }
       }
-      console.error("Error switching to EDU Chain:", switchError)
-      setError("Failed to switch to EDU Chain. Please try again.")
+      console.error("Error switching to BNB Chain:", switchError)
+      setError("Failed to switch to BNB Chain. Please try again.")
       return false
     }
   }
@@ -78,10 +78,10 @@ export function SmartWillProvider({ children }) {
         setLoading(true)
         setError(null)
 
-        // First, try to switch to EDU Chain
+        // First, try to switch to BNB Chain
         const switched = await switchToEDUChain()
         if (!switched) {
-          throw new Error("Failed to switch to EDU Chain")
+          throw new Error("Failed to switch to BNB Chain")
         }
 
         const providerInstance = new ethers.BrowserProvider(window.ethereum)
@@ -93,8 +93,8 @@ export function SmartWillProvider({ children }) {
         ])
 
         // Verify we're on the correct network
-        if (network.chainId !== BigInt(EDU_CHAIN_CONFIG.chainId)) {
-          throw new Error("Please switch to EDU Chain Testnet")
+        if (network.chainId !== BigInt(BNB_CHAIN_CONFIG.chainId)) {
+          throw new Error("Please switch to BNB Chain Testnet")
         }
 
         const balance = await providerInstance.getBalance(accounts[0])
@@ -127,7 +127,7 @@ export function SmartWillProvider({ children }) {
       }
 
       // Verify network before proceeding
-      if (chainId !== EDU_CHAIN_CONFIG.chainId) {
+      if (chainId !== BNB_CHAIN_CONFIG.chainId) {
         await switchToEDUChain()
       }
 
@@ -166,7 +166,7 @@ export function SmartWillProvider({ children }) {
       }
 
       // Verify network before proceeding
-      if (chainId !== EDU_CHAIN_CONFIG.chainId) {
+      if (chainId !== BNB_CHAIN_CONFIG.chainId) {
         await switchToEDUChain()
       }
 
@@ -191,7 +191,7 @@ export function SmartWillProvider({ children }) {
       if (!account) return false
 
       // Verify network before proceeding
-      if (chainId !== EDU_CHAIN_CONFIG.chainId) {
+      if (chainId !== BNB_CHAIN_CONFIG.chainId) {
         await switchToEDUChain()
       }
 
@@ -217,7 +217,7 @@ export function SmartWillProvider({ children }) {
       }
 
       // Verify network before proceeding
-      if (chainId !== EDU_CHAIN_CONFIG.chainId) {
+      if (chainId !== BNB_CHAIN_CONFIG.chainId) {
         await switchToEDUChain()
       }
 
@@ -248,7 +248,7 @@ export function SmartWillProvider({ children }) {
       }
 
       // Verify network before proceeding
-      if (chainId !== EDU_CHAIN_CONFIG.chainId) {
+      if (chainId !== BNB_CHAIN_CONFIG.chainId) {
         await switchToEDUChain()
       }
 
@@ -280,7 +280,7 @@ export function SmartWillProvider({ children }) {
       }
 
       // Verify network before proceeding
-      if (chainId !== EDU_CHAIN_CONFIG.chainId) {
+      if (chainId !== BNB_CHAIN_CONFIG.chainId) {
         await switchToEDUChain()
       }
 
@@ -314,7 +314,7 @@ export function SmartWillProvider({ children }) {
       }
 
       // Verify network before proceeding
-      if (chainId !== EDU_CHAIN_CONFIG.chainId) {
+      if (chainId !== BNB_CHAIN_CONFIG.chainId) {
         await switchToEDUChain()
       }
 
@@ -351,7 +351,7 @@ export function SmartWillProvider({ children }) {
       }
 
       // Verify network before proceeding
-      if (chainId !== EDU_CHAIN_CONFIG.chainId) {
+      if (chainId !== BNB_CHAIN_CONFIG.chainId) {
         await switchToEDUChain()
       }
 
@@ -382,7 +382,7 @@ export function SmartWillProvider({ children }) {
       }
 
       // Verify network before proceeding
-      if (chainId !== EDU_CHAIN_CONFIG.chainId) {
+      if (chainId !== BNB_CHAIN_CONFIG.chainId) {
         await switchToEDUChain()
       }
 

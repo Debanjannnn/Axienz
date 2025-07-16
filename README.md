@@ -1,9 +1,9 @@
-# **EDU LEGACY – Secure Your Digital & Educational Wealth**  
+# **BNB LEGACY – Secure Your Digital & Educational Wealth**  
 
 ## **Overview 🚀**  
 Losing access to private keys, seed phrases, and digital assets is a nightmare—you lose everything forever. But what if you had a **trustless, automated** solution to securely **pass down your assets, educational funds, and intellectual property** to your loved ones or future scholars?  
 
-**EDU LEGACY** is a **decentralized smart will solution** built on the **secure and scalable EDU Chain**. Our **Smart Will system** leverages blockchain technology to **automate, protect, and securely execute asset distribution** based on predefined conditions, ensuring that your **scholarships, research, and educational wealth are never lost**.  
+**BNB LEGACY** is a **decentralized smart will solution** built on the **secure and scalable BNB Chain**. Our **Smart Will system** leverages blockchain technology to **automate, protect, and securely execute asset distribution** based on predefined conditions, ensuring that your **scholarships, research, and educational wealth are never lost**.  
 
 ---  
 ## **Key Features ✨**  
@@ -31,8 +31,8 @@ Losing access to private keys, seed phrases, and digital assets is a nightmare�
 ---  
 ## **Smart Contract Deployment** 🏗️  
 
-- **EDU Chain Testnet Contract**: [0x82d5125995ad54d9ff7f856f4a2d2273b00d8b61](https://edu-chain-testnet.blockscout.com/address/0x82d5125995ad54d9ff7f856f4a2d2273b00d8b61)
-- **Chain**: **EDU Chain Testnet**  
+- **BNB Chain Testnet Contract**: [0x82d5125995ad54d9ff7f856f4a2d2273b00d8b61](https://BNB-chain-testnet.blockscout.com/address/0x82d5125995ad54d9ff7f856f4a2d2273b00d8b61)
+- **Chain**: **BNB Chain Testnet**  
 
 ---  
 ## **Developer Integration 🧐**  
@@ -73,7 +73,7 @@ function getNormalWillAsBeneficiary(address _beneficiary) external view returns 
 ```mermaid  
 graph TD  
     A[User Creates Will] --> B{Normal or Milestone?}  
-    B -->|Normal| C[Lock EDU with Beneficiary]  
+    B -->|Normal| C[Lock BNB with Beneficiary]  
     B -->|Milestone| D[Configure Release Schedule]  
     C --> E[Ping System Every 10 Years (Custom Time Allowed)]  
     D --> F[Automatic Time-Based Releases]  
@@ -105,10 +105,10 @@ graph TD
 
 ---  
 ## **Future Enhancements 🌍**  
-- **Cross-Chain Support** – Expanding EDU LEGACY beyond **EDU Chain**.  
+- **Cross-Chain Support** – Expanding BNB LEGACY beyond **BNB Chain**.  
 - **NFT Deposits** – Secure **educational certificates, research papers, and digital assets**.  
 - **Decentralized Scholarship Management** – Universities can **allocate and distribute grants** via smart contracts.  
-- **Enhanced Block Explorer Integration** – Improving transparency via **EDU Chain’s block explorer**.  
+- **Enhanced Block Explorer Integration** – Improving transparency via **BNB Chain’s block explorer**.  
 
 ---  
 ## **Contribution Guidelines 🤝**  
@@ -125,7 +125,7 @@ MIT Licensed – See [LICENSE](https://opensource.org/licenses/MIT) for details.
 
 ---  
 ## **Join the Future of Secure Educational Inheritance 🔗**  
-EDU LEGACY isn’t just a tool—it’s a **movement to democratize inheritance planning, protect digital wealth, and safeguard educational assets for generations to come**.  
+BNB LEGACY isn’t just a tool—it’s a **movement to democratize inheritance planning, protect digital wealth, and safeguard educational assets for generations to come**.  
 
-🚀 **Secure your legacy today – Built on EDU Chain Testnet!**
+🚀 **Secure your legacy today – Built on BNB Chain Testnet!**
 

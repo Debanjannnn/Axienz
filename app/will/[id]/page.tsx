@@ -126,7 +126,7 @@ export default function WillDetails() {
                 <div className="font-medium">{will.testator}</div>
               </div>
               <div className="text-right">
-                <div className="text-2xl font-bold">{will.amount} EDU</div>
+                <div className="text-2xl font-bold">{will.amount} BNB</div>
                 <div className="text-sm text-muted-foreground">Token Amount</div>
               </div>
             </div>

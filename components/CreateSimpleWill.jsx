@@ -112,7 +112,7 @@ export default function CreateSimpleWill() {
       // Add balance check
       const requiredAmount = Number(formData.amount)
       if (Number(balance) < requiredAmount) {
-        throw new Error(`Insufficient balance. You need ${requiredAmount} EDU but have ${Number(balance).toFixed(4)} EDU`)
+        throw new Error(`Insufficient balance. You need ${requiredAmount} BNB but have ${Number(balance).toFixed(4)} BNB`)
       }
 
       const success = await createNormalWill(
@@ -169,7 +169,7 @@ export default function CreateSimpleWill() {
     const descriptions = {
       termsAccepted: "I accept the terms and conditions of the Educational Smart Will service",
       understandInactivity: "My academic beneficiary can only claim after 10 years of account inactivity",
-      understandFees: "A 2% service fee in EDU tokens will support the Open Campus ecosystem",
+      understandFees: "A 2% service fee in BNB tokens will support the Open Campus ecosystem",
       confirmBeneficiary: "The beneficiary address belongs to my chosen academic successor",
       createBackup: "I have securely backed up my wallet credentials and academic documentation",
       allowDistribution: "If unclaimed, I allow distribution to the Open Campus scholarship fund",
@@ -218,7 +218,7 @@ export default function CreateSimpleWill() {
                   {waitingForSignature ? (
                     <>
                       Please accept the MetaMask request and confirm the transaction<br />
-                      <span className="font-medium">Amount to deposit: {formData.amount} EDU</span>
+                      <span className="font-medium">Amount to deposit: {formData.amount} BNB</span>
                     </>
                   ) : (
                     "Waiting for the transaction to be mined..."
@@ -257,7 +257,7 @@ export default function CreateSimpleWill() {
               <p className="text-lg font-medium text-center">
                 {checkingWill
                   ? "Checking your will status..."
-                  : "Switching your network to EDU Chain Testnet and connecting EDU Legacy with it. Please accept the connection request in your wallet."}
+                  : "Switching your network to BNB Chain Testnet and connecting BNB Legacy with it. Please accept the connection request in your wallet."}
               </p>
               <p className="text-sm text-muted-foreground text-center">
                 This process may take a few seconds. Please be patient.
@@ -308,7 +308,7 @@ export default function CreateSimpleWill() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Balance</p>
-              <p className="font-medium">{Number(balance).toFixed(4)} EDU</p>
+              <p className="font-medium">{Number(balance).toFixed(4)} BNB</p>
             </div>
           </div>
         </CardContent>
@@ -389,7 +389,7 @@ export default function CreateSimpleWill() {
 
               <div className="relative">
                 <Label htmlFor="amount" className="text-lg text-foreground flex items-center gap-2">
-                  <BookOpen className="w-4 h-4" /> Initial EDU Token Deposit
+                  <BookOpen className="w-4 h-4" /> Initial BNB Token Deposit
                 </Label>
                 <Input
                   type="number"
@@ -406,7 +406,7 @@ export default function CreateSimpleWill() {
                 {formData.amount && (
                   <div className="mt-2 text-sm text-muted-foreground flex items-center gap-2">
                     <Info className="w-4 h-4" />
-                    Final deposit: {(Number(formData.amount) * 0.98).toFixed(6)} EDU (2% supports EDU Legacy Scholarship)
+                    Final deposit: {(Number(formData.amount) * 0.98).toFixed(6)} BNB (2% supports BNB Legacy Scholarship)
                   </div>
                 )}
               </div>
