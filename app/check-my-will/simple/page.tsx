@@ -71,9 +71,6 @@ const CheckMyWill = () => {
   const [amountUSD, setAmountUSD] = useState(0);
   const [depositAmountUSD, setDepositAmountUSD] = useState(0);
   const [loadingPrice, setLoadingPrice] = useState(false);
-  const [userActivity, setUserActivity] = useState<any[]>([]);
-  const [activitySummary, setActivitySummary] = useState<any>(null);
-  const [loadingActivity, setLoadingActivity] = useState(false);
 
   const {
     account,
@@ -83,8 +80,6 @@ const CheckMyWill = () => {
     depositNormalWill,
     withdrawNormalWill,
     hasCreatedWill,
-    getUserActivity,
-    getUserActivitySummary,
     loading: contextLoading,
     error: contextError,
   } = useSmartWill();
@@ -122,34 +117,16 @@ const CheckMyWill = () => {
     }
   }, [bnbPrice, willDetails, depositAmount]);
 
-  // Fetch user activity
-  const fetchUserActivity = useCallback(async () => {
+  const fetchWillDetails = useCallback(async () => {
     if (!account) return;
 
-    setLoadingActivity(true);
-    try {
-      const [activity, summary] = await Promise.all([
-        getUserActivity(account, 0, 5),
-        getUserActivitySummary(account),
-      ]);
-
-      setUserActivity(activity.activities || []);
-      setActivitySummary(summary);
-    } catch (error) {
-      console.error("Error fetching user activity:", error);
-    } finally {
-      setLoadingActivity(false);
-    }
-  }, [account, getUserActivity, getUserActivitySummary]);
-
-  const fetchWillDetails = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const details = await getNormalWill(account);
       setWillDetails(details);
       checkWithdrawalEligibility(details.creationTime);
-    } catch (err) {
+    } catch (err: any) {
       setError("Unable to fetch will details. Please try again.");
       setWillDetails(null);
     } finally {
@@ -178,24 +155,21 @@ const CheckMyWill = () => {
         return;
       }
 
-      const hasWill = await hasCreatedWill(account);
+      try {
+        const hasWill = await hasCreatedWill(account);
 
-      if (!hasWill) {
-        router.push("/create-will/simple");
-      } else {
-        fetchWillDetails();
-        fetchUserActivity();
+        if (!hasWill) {
+          router.push("/create-will/simple");
+        } else {
+          fetchWillDetails();
+        }
+      } catch (error) {
+        console.error("Error checking will status:", error);
+        setError("Error checking will status. Please try again.");
       }
     }
     checkAndFetchWill();
-  }, [
-    account,
-    connectWallet,
-    fetchWillDetails,
-    fetchUserActivity,
-    hasCreatedWill,
-    router,
-  ]);
+  }, [account, connectWallet, fetchWillDetails, hasCreatedWill, router]);
 
   // Update countdown timer
   useEffect(() => {
@@ -209,7 +183,10 @@ const CheckMyWill = () => {
       const totalTime = claimWaitTime;
 
       const elapsed = Number(claimWaitTime - remainingTime);
-      const progress = Math.min(100, (elapsed / Number(totalTime)) * 100);
+      const progress = Math.min(
+        100,
+        Math.max(0, (elapsed / Number(totalTime)) * 100),
+      );
       setTimeProgress(progress);
 
       const timeSinceLastPing = now - lastPingTime;
@@ -250,11 +227,15 @@ const CheckMyWill = () => {
     setIsDepositing(true);
     setError(null);
     try {
-      await depositNormalWill(depositAmount);
-      await fetchWillDetails();
-      setDepositAmount("");
-    } catch (err) {
-      setError("Failed to deposit funds. Please try again.");
+      const success = await depositNormalWill(depositAmount);
+      if (success) {
+        await fetchWillDetails();
+        setDepositAmount("");
+      } else {
+        setError("Failed to deposit funds. Please try again.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to deposit funds. Please try again.");
     } finally {
       setIsDepositing(false);
     }
@@ -264,11 +245,14 @@ const CheckMyWill = () => {
     setIsPinging(true);
     setError(null);
     try {
-      await ping();
-      await fetchWillDetails();
-      await fetchUserActivity();
-    } catch (err) {
-      setError("Failed to confirm activity. Please try again.");
+      const success = await ping();
+      if (success) {
+        await fetchWillDetails();
+      } else {
+        setError("Failed to confirm activity. Please try again.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to confirm activity. Please try again.");
     } finally {
       setIsPinging(false);
     }
@@ -277,10 +261,15 @@ const CheckMyWill = () => {
   const handleWithdraw = async () => {
     if (!willDetails) return;
     try {
-      await withdrawNormalWill(willDetails.amount.toString());
-      await fetchWillDetails();
-    } catch (err) {
-      setError("Failed to withdraw funds. Please try again.");
+      const amountBNB = Number(willDetails.amount) / 1e18;
+      const success = await withdrawNormalWill(amountBNB.toString());
+      if (success) {
+        await fetchWillDetails();
+      } else {
+        setError("Failed to withdraw funds. Please try again.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to withdraw funds. Please try again.");
     }
   };
 
@@ -317,7 +306,7 @@ const CheckMyWill = () => {
   }
 
   // If no will details are found after wallet connection
-  if (!willDetails) {
+  if (!willDetails && !loading) {
     return (
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center bg-transparent min-h-screen p-4">
@@ -338,7 +327,21 @@ const CheckMyWill = () => {
     );
   }
 
+  if (loading || contextLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center bg-transparent min-h-screen">
+          <Card className="w-full flex flex-col justify-center items-center max-w-md bg-black/40 backdrop-blur-md border-white/20 text-center p-6 pb-9 shadow-xl">
+            <p className="pb-7 text-white">Loading Will Details...</p>
+            <Loader2 className="w-12 h-12 animate-spin text-amber-400" />
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   const getStatusInfo = () => {
+    if (!willDetails) return { color: "text-gray-400", text: "Unknown" };
     if (willDetails.isClaimed)
       return { color: "text-red-500", text: "Claimed" };
     const now = BigInt(Math.floor(Date.now() / 1000));
@@ -400,14 +403,13 @@ const CheckMyWill = () => {
                       size="sm"
                       onClick={() => {
                         fetchWillDetails();
-                        fetchUserActivity();
                         fetchBNBPrice();
                       }}
-                      disabled={loading || loadingActivity || loadingPrice}
+                      disabled={loading || loadingPrice}
                       className="text-gray-400 hover:text-amber-400"
                     >
                       <RefreshCw
-                        className={`w-4 h-4 ${loading || loadingActivity || loadingPrice ? "animate-spin" : ""}`}
+                        className={`w-4 h-4 ${loading || loadingPrice ? "animate-spin" : ""}`}
                       />
                     </Button>
                   </div>
@@ -431,7 +433,7 @@ const CheckMyWill = () => {
                       <InfoCard
                         icon={User}
                         title="Beneficiary"
-                        content={willDetails.beneficiary}
+                        content={willDetails?.beneficiary || "N/A"}
                       />
                       <InfoCard
                         icon={Coins}
@@ -439,7 +441,9 @@ const CheckMyWill = () => {
                         content={
                           <div>
                             <div className="text-lg font-semibold">
-                              {formatBNB(Number(willDetails.amount) / 1e18)}
+                              {formatBNB(
+                                Number(willDetails?.amount || 0) / 1e18,
+                              )}
                             </div>
                             <div className="text-sm text-gray-400">
                               {formatUSD(amountUSD)}
@@ -450,18 +454,26 @@ const CheckMyWill = () => {
                       <InfoCard
                         icon={Calendar}
                         title="Created On"
-                        content={new Date(
-                          Number(willDetails.creationTime) * 1000,
-                        ).toLocaleDateString(undefined, {
-                          year: "numeric",
-                          month: "long",
-                          day: "numeric",
-                        })}
+                        content={
+                          willDetails
+                            ? new Date(
+                                Number(willDetails.creationTime) * 1000,
+                              ).toLocaleDateString(undefined, {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                              })
+                            : "N/A"
+                        }
                       />
                       <InfoCard
                         icon={History}
                         title="Last Activity"
-                        content={`${lastPingTimeAgo} (${new Date(Number(willDetails.lastPingTime) * 1000).toLocaleString()})`}
+                        content={
+                          willDetails
+                            ? `${lastPingTimeAgo} (${new Date(Number(willDetails.lastPingTime) * 1000).toLocaleString()})`
+                            : "N/A"
+                        }
                       />
                     </div>
 
@@ -489,7 +501,7 @@ const CheckMyWill = () => {
                         Will Description
                       </h3>
                       <p className="text-sm text-gray-300">
-                        {willDetails.description}
+                        {willDetails?.description || "No description provided"}
                       </p>
                     </div>
                   </CardContent>
@@ -571,7 +583,7 @@ const CheckMyWill = () => {
                           </p>
                           <Button
                             onClick={handlePing}
-                            disabled={isPinging || willDetails.isClaimed}
+                            disabled={isPinging || willDetails?.isClaimed}
                             className="w-full bg-green-600 hover:bg-green-700 text-white"
                           >
                             {isPinging ? (
@@ -590,13 +602,15 @@ const CheckMyWill = () => {
                       </div>
                     </div>
 
-                    {error && (
+                    {(error || contextError) && (
                       <Alert
                         variant="destructive"
                         className="mt-4 bg-red-900/20 border-red-500/50"
                       >
                         <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{error}</AlertDescription>
+                        <AlertDescription>
+                          {error || contextError}
+                        </AlertDescription>
                       </Alert>
                     )}
                   </CardContent>
@@ -623,74 +637,39 @@ const CheckMyWill = () => {
                   </CardContent>
                 </Card>
 
-                {/* Activity Summary */}
+                {/* Quick Stats */}
                 <Card className="bg-black/40 backdrop-blur-md border-white/20 shadow-xl">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-white flex items-center gap-2 text-lg">
-                        <Activity className="w-5 h-5 text-amber-400" />
-                        Recent Activity
-                      </CardTitle>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={fetchUserActivity}
-                        disabled={loadingActivity}
-                        className="text-gray-400 hover:text-amber-400 p-1"
-                      >
-                        <RefreshCw
-                          className={`w-3 h-3 ${loadingActivity ? "animate-spin" : ""}`}
-                        />
-                      </Button>
-                    </div>
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2 text-lg">
+                      <Activity className="w-5 h-5 text-amber-400" />
+                      Quick Stats
+                    </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    {userActivity.length > 0 ? (
-                      <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {userActivity.map((activity, index) => (
-                          <div
-                            key={index}
-                            className="flex items-center justify-between py-2 border-b border-white/10 last:border-b-0"
-                          >
-                            <div>
-                              <p className="text-sm text-white font-medium">
-                                {activity.activityType
-                                  .replace("_", " ")
-                                  .toLowerCase()
-                                  .replace(/\b\w/g, (l) => l.toUpperCase())}
-                              </p>
-                              <p className="text-xs text-gray-400">
-                                {new Date(
-                                  activity.timestamp * 1000,
-                                ).toLocaleDateString()}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-xs text-amber-400">
-                                {formatBNB(parseFloat(activity.amount) / 1e18)}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-400 text-center py-4">
-                        No recent activity
-                      </p>
-                    )}
-
-                    {activitySummary && (
-                      <div className="pt-3 border-t border-white/10">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-400">
-                            Total Activities:
-                          </span>
-                          <span className="text-white">
-                            {activitySummary.totalActivities}
-                          </span>
-                        </div>
-                      </div>
-                    )}
+                  <CardContent className="space-y-4">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Wait Time:</span>
+                      <span className="text-white">
+                        {willDetails
+                          ? `${Number(willDetails.claimWaitTime) / (24 * 60 * 60)} days`
+                          : "N/A"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Can Withdraw:</span>
+                      <span
+                        className={
+                          withdrawalAvailable
+                            ? "text-green-400"
+                            : "text-red-400"
+                        }
+                      >
+                        {withdrawalAvailable ? "Yes" : "No"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Status:</span>
+                      <span className={status.color}>{status.text}</span>
+                    </div>
                   </CardContent>
                 </Card>
               </div>
