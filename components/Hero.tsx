@@ -19,11 +19,9 @@ const poppins = Poppins({
 });
 
 export default function HeroSection() {
-  // @ts-expect-error - count state not used but kept for potential future features
   const [count, setCount] = useState(0);
   const { scrollY } = useScroll();
   const y1 = useTransform(scrollY, [0, 300], [0, -50]);
-  // @ts-expect-error - y2 transform not used but kept for potential parallax effects
   const y2 = useTransform(scrollY, [0, 300], [0, -30]);
   const opacity = useTransform(scrollY, [0, 300], [1, 0.8]);
 
